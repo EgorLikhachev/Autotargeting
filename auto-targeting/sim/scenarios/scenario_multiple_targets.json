@@ -1,0 +1,53 @@
+{
+  "name": "multiple_targets_selection",
+  "description": "Three targets visible simultaneously. Operator selects target #2, verifies that the system tracks the correct one and ignores others.",
+  "video": {
+    "type": "synthetic",
+    "pattern": "multiple_dots",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_frames": 450,
+    "targets": [
+      { "id": 1, "start_x": 200, "start_y": 360, "speed_x": 2, "speed_y": 0 },
+      { "id": 2, "start_x": 640, "start_y": 360, "speed_x": -1, "speed_y": 1 },
+      { "id": 3, "start_x": 1080, "start_y": 360, "speed_x": 0, "speed_y": -2 }
+    ]
+  },
+  "detections": {
+    "type": "scripted",
+    "generator": "from_video",
+    "class": "person",
+    "class_id": 0,
+    "confidence": 0.85,
+    "bbox_width": 50,
+    "bbox_height": 100
+  },
+  "operator_actions": [
+    {
+      "at_frame": 30,
+      "action": "select_target",
+      "target_id": 2,
+      "note": "Operator picks the middle target"
+    }
+  ],
+  "expected_events": [
+    {
+      "at_frame": 33,
+      "event": "state_transition",
+      "to": "TRACKING"
+    },
+    {
+      "at_frame": 100,
+      "event": "tracking_correct_target",
+      "tracked_id": 2,
+      "note": "Tracker should be following target #2, not #1 or #3"
+    }
+  ],
+  "expected_final_state": "TRACKING",
+  "kpi_checks": {
+    "lock_acquisition_time_ms": 1000,
+    "tracking_accuracy_percent": 85,
+    "wrong_target_lock_count": 0
+  }
+}

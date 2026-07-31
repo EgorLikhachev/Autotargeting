@@ -10,6 +10,10 @@ authors.workspace = true
 name = "auto-targeting"
 path = "src/main.rs"
 
+[lib]
+name = "auto_targeting_cli"
+path = "src/lib.rs"
+
 [dependencies]
 common = { workspace = true }
 fc-adapter = { workspace = true }
@@ -29,3 +33,6 @@ anyhow = { workspace = true }
 chrono = { workspace = true }
 parking_lot = { workspace = true }
 rustyline = "14.0"
+
+[dev-dependencies]
+tokio-test = { workspace = true }

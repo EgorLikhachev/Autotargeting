@@ -1,0 +1,70 @@
+{
+  "name": "occlusion_recovery",
+  "description": "Target disappears for 30 frames (1 second), then reappears. Tests tracker's Kalman prediction and recovery logic.",
+  "video": {
+    "type": "synthetic",
+    "pattern": "moving_dot",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_frames": 600,
+    "dot_speed_px_per_frame": 3
+  },
+  "detections": {
+    "type": "scripted",
+    "generator": "from_video",
+    "class": "person",
+    "class_id": 0,
+    "confidence": 0.9,
+    "bbox_width": 60,
+    "bbox_height": 120,
+    "occlusions": [
+      {
+        "start_frame": 150,
+        "end_frame": 180,
+        "note": "1-second occlusion"
+      }
+    ]
+  },
+  "operator_actions": [
+    {
+      "at_frame": 30,
+      "action": "select_target",
+      "target_id": 1
+    }
+  ],
+  "expected_events": [
+    {
+      "at_frame": 33,
+      "event": "state_transition",
+      "to": "TRACKING"
+    },
+    {
+      "at_frame": 150,
+      "event": "occlusion_start",
+      "note": "Target disappears"
+    },
+    {
+      "at_frame": 150,
+      "event": "tracking_degraded",
+      "note": "Should stay in TRACKING_DEGRADED during occlusion (within hysteresis window)"
+    },
+    {
+      "at_frame": 180,
+      "event": "occlusion_end",
+      "note": "Target reappears"
+    },
+    {
+      "at_frame": 183,
+      "event": "state_transition",
+      "to": "TRACKING",
+      "note": "Reacquired after 3 confirmation frames"
+    }
+  ],
+  "expected_final_state": "TRACKING",
+  "kpi_checks": {
+    "recovery_time_ms": 500,
+    "lost_state_transitions": 0,
+    "watchdog_triggers": 0
+  }
+}

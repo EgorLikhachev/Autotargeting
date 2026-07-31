@@ -1,0 +1,63 @@
+{
+  "name": "oscillation_resistance",
+  "description": "Target moves erratically with sharp direction changes. Tests the oscillation detector and anti-loop guard. The system should NOT oscillate — it should freeze commands when oscillation is detected.",
+  "video": {
+    "type": "synthetic",
+    "pattern": "moving_dot",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_frames": 600
+  },
+  "detections": {
+    "type": "scripted",
+    "generator": "oscillating",
+    "class": "person",
+    "class_id": 0,
+    "confidence": 0.9,
+    "bbox_width": 60,
+    "bbox_height": 120,
+    "motion_pattern": {
+      "type": "sine_with_jitter",
+      "amplitude_px": 200,
+      "frequency_hz": 2,
+      "jitter_px": 50,
+      "direction_changes_per_second": 4
+    }
+  },
+  "operator_actions": [
+    {
+      "at_frame": 30,
+      "action": "select_target",
+      "target_id": 1
+    }
+  ],
+  "expected_events": [
+    {
+      "at_frame": 33,
+      "event": "state_transition",
+      "to": "TRACKING"
+    },
+    {
+      "at_frame": "50-150",
+      "event": "oscillation_detected",
+      "note": "Anti-loop guard should trigger on sign-change pattern"
+    },
+    {
+      "at_frame": "50-150",
+      "event": "command_frozen",
+      "note": "Commands frozen for 1 second after oscillation"
+    },
+    {
+      "at_frame": "50-200",
+      "event": "tracking_degraded",
+      "note": "State should transition to TRACKING_DEGRADED"
+    }
+  ],
+  "expected_final_state": "TRACKING_DEGRADED",
+  "kpi_checks": {
+    "oscillation_escalation_to_abort": false,
+    "max_consecutive_oscillations": 2,
+    "watchdog_triggers": 0
+  }
+}

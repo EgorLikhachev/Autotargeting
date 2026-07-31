@@ -7,16 +7,13 @@
 //! Status: 🚧 Phase 0 — basic scaffolding + mock mode smoke test.
 //! Real video/inference integration lands in Phase 5.
 
-mod args;
-mod operator;
-mod repl;
-
 use anyhow::Result;
-use args::{CliArgs, RunMode};
+use auto_targeting_cli::args::{CliArgs, RunMode};
+use auto_targeting_cli::operator::OperatorCommand;
+use auto_targeting_cli::repl;
 use clap::Parser;
 use common::AppConfig;
 use fc_adapter::FlightControllerAdapter;
-use operator::OperatorCommand;
 use parking_lot::Mutex as PlMutex;
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;

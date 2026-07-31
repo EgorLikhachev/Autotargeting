@@ -1,0 +1,54 @@
+{
+  "name": "static_target",
+  "description": "A single static target at frame center. Tests basic lock acquisition and tracking.",
+  "video": {
+    "type": "synthetic",
+    "pattern": "moving_dot",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_frames": 300
+  },
+  "detections": {
+    "type": "scripted",
+    "generator": "from_video",
+    "class": "person",
+    "class_id": 0,
+    "confidence": 0.92,
+    "bbox_width": 60,
+    "bbox_height": 120
+  },
+  "operator_actions": [
+    {
+      "at_frame": 10,
+      "action": "select_target",
+      "target_id": 1
+    }
+  ],
+  "expected_events": [
+    {
+      "at_frame": 10,
+      "event": "state_transition",
+      "from": "SCANNING",
+      "to": "TARGET_SELECTED"
+    },
+    {
+      "at_frame": 13,
+      "event": "state_transition",
+      "from": "TARGET_SELECTED",
+      "to": "TRACKING",
+      "note": "After 3 confirmation frames"
+    },
+    {
+      "at_frame": 50,
+      "event": "fc_command_sent",
+      "command_type": "set_position_target_local_ned"
+    }
+  ],
+  "expected_final_state": "TRACKING",
+  "kpi_checks": {
+    "lock_acquisition_time_ms": 1000,
+    "tracking_accuracy_percent": 95,
+    "watchdog_triggers": 0
+  }
+}

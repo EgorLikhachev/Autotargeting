@@ -21,7 +21,7 @@ pub mod traits;
 pub mod v4l2_stub;
 
 pub use replay::ReplaySource;
-pub use synthetic::{SyntheticPattern, SyntheticVideoSource};
+pub use synthetic::{SyntheticConfig, SyntheticPattern, SyntheticVideoSource};
 pub use traits::{VideoCaptureError, VideoSource};
 pub use v4l2_stub::V4l2Source;
 

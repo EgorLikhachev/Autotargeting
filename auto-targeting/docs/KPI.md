@@ -38,7 +38,7 @@
 | KPI | Target | Phase | Where measured | Current |
 |---|---|---|---|---|
 | Watchdog triggers (normal mode) | < 1 / hour | 5, 7 | HITL-T2 | — |
-| Oscillation events (SITL 30 min) | 0 | 5 | SITL | ✅ detector tested (unit test) |
+| Oscillation events (SITL 30 min) | 0 | 5 | SITL | ✅ detector tested (unit + e2e) |
 | HITL 8-hour stability run | no crash | 7 | HITL-T2 | — |
 | Memory growth (8 hours) | < 50 MB | 7 | HITL-T2 | — |
 
@@ -46,7 +46,7 @@
 
 | KPI | Target | Phase | Where measured | Current |
 |---|---|---|---|---|
-| Unit test pass rate | 100% | all | CI | ✅ 105 passing, 4 ignored (vivid) |
+| Unit test pass rate | 100% | all | CI | ✅ 134 passing, 5 ignored (vivid) |
 | Clippy warnings (with `-D warnings`) | 0 | all | CI | ✅ 0 |
 | `cargo fmt --check` | clean | all | CI | ✅ clean |
 | `cargo audit` critical CVEs | 0 | all | CI | — |
@@ -57,24 +57,26 @@
 
 ### Completed
 - ✅ Workspace builds: `cargo build --workspace`
-- ✅ All tests pass: **105 tests** across 7 crates + 4 vivid-gated (ignored)
+- ✅ All tests pass: **134 tests** across 7 crates + 5 vivid-gated (ignored)
 - ✅ Clippy clean: `cargo clippy --workspace --all-targets -- -D warnings`
 - ✅ Fmt clean: `cargo fmt --check`
 - ✅ Smoke test binary runs: `cargo run -p auto-targeting-cli -- --mock-all`
 - ✅ Interactive REPL: `cargo run -p auto-targeting-cli -- --repl`
+- ✅ End-to-end integration tests: `cargo test --test e2e_pipeline`
+- ✅ Commander struct: full lifecycle (connect → arm → scan → select → track → abort → reset)
 
 ### Test breakdown by crate
 
-| Crate | Tests | Notes |
-|---|---|---|
-| `common` | 8 | types, config (TOML parsing, env overrides) |
-| `commander` | 26 | state machine (10), watchdogs (7), anti-loop (9) |
-| `fc-adapter` | 19 | MockFcAdapter (10), rate limiter (4), SITL MAVLink (9) |
-| `cv-inference` | 5 | NMS (3), mock backend (2) |
-| `target-tracker` | 11 | Kalman (5), tracker (6) |
-| `video-capture` | 20 | synthetic (8), replay (8), v4l2 stub (4) + 2 vivid-gated |
-| `cli` | 16 | REPL commands (16) |
-| **Total** | **105** | + 4 vivid-gated (ignored by default) |
+| Crate | Unit tests | Integration tests | Notes |
+|---|---|---|---|
+| `common` | 8 | — | types, config (TOML parsing, env overrides) |
+| `commander` | 44 | — | state machine (10), watchdogs (7), anti-loop (9), Commander (18) |
+| `fc-adapter` | 19 | — | MockFcAdapter (10), rate limiter (4), SITL MAVLink (9) |
+| `cv-inference` | 5 | — | NMS (3), mock backend (2) |
+| `target-tracker` | 11 | — | Kalman (5), tracker (6) |
+| `video-capture` | 20 | — | synthetic (8), replay (8), v4l2 stub (4) + 2 vivid-gated |
+| `cli` | 16 | 11 | REPL commands (16) + e2e pipeline (11) |
+| **Total** | **123** | **11** | **+ 5 vivid-gated (ignored)** |
 
 ### Phase progress
 
@@ -87,9 +89,17 @@
 | 3: Target Tracker | 🚧 Skeleton + Kalman | Single-target tracker working; multi-target is Phase 3 stretch |
 | 4: FC Adapter | 🚧 Mock + SITL | `MockFcAdapter` ✅, `SittlMavlinkAdapter` ✅, `ArduPilotMavlinkAdapter` stub |
 | 4.8: SITL MAVLink | ✅ Complete | `mavlink` 0.18 crate, UDP transport, 9 tests |
-| 5: Commander | 🚧 Phase 0 skeleton | State machine + watchdogs + anti-loop all working |
+| 5: Commander | ✅ Phase 5.1 Complete | `Commander` struct + full lifecycle + 18 tests |
 | 5.6: CLI REPL | ✅ Complete | 16 commands, 16 tests, interactive console |
-| 6: Integration | 🚧 | Replay infrastructure ready |
+| 6: Integration | ✅ e2e tests | 11 integration tests covering full pipeline |
 | 6.3: Replay | ✅ Complete | `Recording` + `ReplaySource` with loop/real-time modes |
 | 7: HITL | — | Awaiting hardware |
 | 8: Flight tests | — | Awaiting hardware |
+
+### ADRs
+
+| ADR | Title | Status |
+|---|---|---|
+| 0001 | RKNN Inference via C++ Bridge Microservice | Accepted (with protocol spec) |
+| 0002 | Tracking Algorithm — IoU + Kalman | Accepted |
+| TEMPLATE | Template for new ADRs | — |

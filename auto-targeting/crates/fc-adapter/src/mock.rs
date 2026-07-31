@@ -55,6 +55,16 @@ impl MockFcAdapter {
         }
     }
 
+    /// Create a mock that shares state with another mock (via its `state_handle()`).
+    /// Useful for tests where the mock is moved into a commander but the test
+    /// needs to inspect recorded commands.
+    pub fn new_with_shared_state(state: Arc<Mutex<MockFcState>>) -> Self {
+        Self {
+            state,
+            artificial_delay_ms: 0,
+        }
+    }
+
     /// Create a mock with an artificial delay per command (simulates slow FC).
     pub fn with_delay_ms(delay_ms: u64) -> Self {
         Self {

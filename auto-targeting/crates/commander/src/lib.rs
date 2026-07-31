@@ -6,9 +6,13 @@
 //! oscillation detector stack described in `docs/ARCHITECTURE.md` §1.4.
 
 pub mod anti_loop;
+pub mod commander;
 pub mod state_machine;
 pub mod watchdogs;
 
-pub use anti_loop::AntiLoopGuard;
+pub use anti_loop::{AntiLoopGuard, CorrectionCommand, GuardDecision};
+pub use commander::{Commander, CommanderError, CommanderHealth, CommanderResult};
 pub use state_machine::{StateMachine, StateTransitionError};
-pub use watchdogs::{WatchdogId, WatchdogRegistry};
+pub use watchdogs::{
+    WatchdogAction, WatchdogConfig, WatchdogId, WatchdogRegistry, WatchdogSnapshot,
+};

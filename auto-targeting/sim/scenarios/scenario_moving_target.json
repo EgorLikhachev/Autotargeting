@@ -1,0 +1,49 @@
+{
+  "name": "moving_target_horizontal",
+  "description": "A target moving horizontally across the frame at constant velocity. Tests tracker prediction and yaw correction commands.",
+  "video": {
+    "type": "synthetic",
+    "pattern": "moving_dot",
+    "width": 1280,
+    "height": 720,
+    "fps": 30,
+    "duration_frames": 600,
+    "dot_speed_px_per_frame": 4
+  },
+  "detections": {
+    "type": "scripted",
+    "generator": "from_video",
+    "class": "vehicle",
+    "class_id": 2,
+    "confidence": 0.88,
+    "bbox_width": 80,
+    "bbox_height": 60
+  },
+  "operator_actions": [
+    {
+      "at_frame": 30,
+      "action": "select_target",
+      "target_id": 1
+    }
+  ],
+  "expected_events": [
+    {
+      "at_frame": 33,
+      "event": "state_transition",
+      "to": "TRACKING"
+    },
+    {
+      "at_frame": 50,
+      "event": "fc_command_sent",
+      "command_type": "set_position_target_local_ned",
+      "note": "Yaw correction should track target motion"
+    }
+  ],
+  "expected_final_state": "TRACKING",
+  "kpi_checks": {
+    "lock_acquisition_time_ms": 1000,
+    "tracking_accuracy_percent": 90,
+    "yaw_correction_rate_hz": 10,
+    "watchdog_triggers": 0
+  }
+}
