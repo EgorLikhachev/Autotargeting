@@ -1,0 +1,63 @@
+# Конфиг для тестирования с ArduPilot SITL (Docker)
+#
+# Использование:
+#   1. Запустите SITL: cd sim/sitl && docker compose up -d
+#   2. Дождитесь запуска (~30 сек после первой сборки)
+#      Проверьте: docker compose logs -f sitl | grep "Ready"
+#   3. Запустите auto-targeting:
+#      cargo run -p auto-targeting-cli -- --config sim/sitl/sitl-config.toml -- --repl
+#   4. В REPL: status → arm → set-mode guided → ...
+
+[video]
+# SITL не имеет камеры — используем synthetic source
+device = "/dev/null"
+width = 1280
+height = 720
+fps = 30
+format = "mjpeg"
+queue_depth = 3
+
+[inference]
+model_path = "/tmp/yolov8n_int8.rknn"
+confidence_threshold = 0.45
+nms_threshold = 0.45
+track_classes = ["person"]
+bridge_socket = "/tmp/rknn-bridge.sock"
+allow_cpu_fallback = true
+
+[tracker]
+max_target_age_ms = 2000
+max_missed_frames = 60
+lock_confirmation_frames = 3
+match_iou_threshold = 0.3
+
+[fc]
+# Используем ArduPilotMavlinkAdapter (поддерживает TCP)
+adapter = "ardupilot-mavlink"
+# TCP подключение к SITL (порт 5760 проброшен в docker-compose.yml)
+endpoint = "tcpout:127.0.0.1:5760"
+baud_rate = 115200
+# Companion computer: system_id=255 (GCS), component_id=1
+system_id = 255
+component_id = 1
+target_system_id = 1
+target_component_id = 1
+command_rate_hz = 10
+heartbeat_timeout_ms = 1000
+
+[commander]
+video_loop_wdt_ms = 200
+inference_loop_wdt_ms = 500
+tracking_loop_wdt_ms = 100
+command_loop_wdt_ms = 200
+deadband_fraction = 0.05
+loss_hysteresis_ms = 500
+max_yaw_rate_dps = 30.0
+max_pitch_rate_dps = 15.0
+max_offset_fraction = 0.30
+oscillation_window = 30
+oscillation_threshold = 0.5
+oscillation_abort_count = 3
+
+log_file = ""
+log_filter = "info,auto_targeting=debug"

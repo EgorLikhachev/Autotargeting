@@ -322,24 +322,100 @@ sudo modprobe -r vivid
 **Цель:** проверить ArduPilotMavlinkAdapter против реального ArduPilot firmware
 в симуляторе.
 
-> **Требует:** Docker на dev-машине.
+> **Требует:** Docker на dev-машине (Ubuntu/Debian).
+> **Время первой сборки:** ~10-15 минут (компиляция ArduPilot).
+> **Время последующих запусков:** ~5 секунд (Docker cache).
 
-### Запуск SITL
+### Шаг 1: Запуск SITL
 
 ```bash
 # В корне проекта
-cd sim/sitl
-
-# Запустить ArduPilot SITL в Docker
-docker compose up -d
-
-# Проверить, что контейнер работает
-docker compose ps
-
-# MAVLink доступен на:
-#   tcp://127.0.0.1:5760  (для QGroundControl)
-#   udp://127.0.0.1:5763  (для companion computer)
+./sim/sitl/run_sitl.sh start
 ```
+
+**Что произойдёт:**
+1. Проверка Docker
+2. Если образа нет — сборка ArduPilot из исходников (~10-15 мин)
+3. Запуск контейнера
+4. Ожидание открытия порта 5760 (~30 сек после сборки)
+
+**Ожидаемый вывод:**
+```
+[INFO] Запуск ArduPilot SITL...
+[INFO] Образ не найден. Первая сборка займёт ~10-15 минут...
+[INFO] Сборка ArduPilot из исходников...
+... (10-15 минут логов сборки) ...
+[INFO] Ожидание запуска SITL...
+[INFO] Проверка MAVLink на порту 5760...
+  Ожидание... (15/60)
+[OK] SITL запущен! MAVLink доступен на tcp://127.0.0.1:5760
+
+[INFO] Подключение auto-targeting:
+  cargo run -p auto-targeting-cli -- --config sim/sitl/sitl-config.toml -- --repl
+```
+
+### Шаг 2: Проверка MAVLink соединения
+
+```bash
+# Проверить, что SITL отвечает
+./sim/sitl/run_sitl.sh test
+```
+
+**Ожидаемый вывод (если установлен pymavlink):**
+```
+[INFO] Тест MAVLink соединения с SITL...
+[INFO] Тест через pymavlink...
+Ожидание heartbeat...
+✅ HEARTBEAT получен! mode=0, armed=false
+
+Тест arm/disarm...
+  Armed: true
+  Armed: false
+
+✅ MAVLink тест пройден!
+```
+
+### Шаг 3: Запуск auto-targeting против SITL
+
+```bash
+# В корне проекта (другой терминал)
+cargo run -p auto-targeting-cli -- \
+  --config sim/sitl/sitl-config.toml -- --repl
+```
+
+### Шаг 4: Тестовые команды в REPL
+
+```
+status                        # проверить, что heartbeat получен (FC heartbeat: OK)
+arm                           # армировать (SITL должен ответить)
+status                        # FC armed: true
+set-mode guided               # переключить в GUIDED
+status                        # FC mode: Guided
+set-mode loiter               # переключить в LOITER
+status                        # FC mode: Loiter
+abort                         # RTL — SITL должен перейти в RTL
+status                        # FC mode: Rtl
+disarm
+quit
+```
+
+### Шаг 5: Автоматизированные тесты (опционально)
+
+```bash
+# Запустить 7 интеграционных тестов против SITL
+cargo test -p fc-adapter --test sitl_integration -- --include-ignored
+```
+
+**Тесты:**
+| Тест | Что проверяет |
+|---|---|
+| `test_sitl_connect` | Подключение к SITL по TCP |
+| `test_sitl_heartbeat` | Получение HEARTBEAT за 5 сек |
+| `test_sitl_arm_disarm` | Команды arm/disarm |
+| `test_sitl_mode_change` | Смена режима (GUIDED, LOITER, RTL) |
+| `test_sitl_attitude` | Получение ATTITUDE telemetry |
+| `test_sitl_heartbeat_stability` | Стабильность heartbeat (10 сек, < 5% stale) |
+| `test_sitl_heartbeat_loss_detection` | Детекция потери связи |
 
 ### Подключение через QGroundControl (опционально)
 
@@ -351,33 +427,13 @@ docker compose ps
 qgroundcontrol &
 ```
 
-### Запуск auto-targeting против SITL
+В QGroundControl вы увидите:
+- Карта с позицией дрона (Canberra, Australia по умолчанию)
+- Текущий режим (MANUAL, GUIDED, RTL)
+- Armed/disarmed статус
+- Attitude (roll/pitch/yaw) в реальном времени
 
-```bash
-# В корне проекта
-# Создать конфиг для SITL
-cp config.example.toml config.sitl.toml
-# Отредактировать: adapter = "sitl-mavlink", endpoint = "udpin:0.0.0.0:14550"
-
-# Или через env vars:
-AT_FC__ADAPTER=sitl-mavlink \
-AT_FC__ENDPOINT=udpin:0.0.0.0:14550 \
-cargo run -p auto-targeting-cli -- --repl
-```
-
-### Тестовые команды в REPL
-
-```
-status                        # проверить, что heartbeat получен
-arm                           # армировать (SITL должен ответить)
-set-mode guided               # переключить в GUIDED
-simulate-attitude 0.1 0.2 1.5 # SITL начнёт сообщать attitude
-status                        # увидеть реальный attitude от SITL
-abort                         # RTL — SITL должен перейти в RTL
-quit
-```
-
-### Проверка через MAVProxy (опционально)
+### Проверка через MAVProxy (альтернатива)
 
 ```bash
 # Установить MAVProxy
@@ -389,23 +445,50 @@ mavproxy.py --master=tcp:127.0.0.1:5760
 # В MAVProxy:
 # > status
 # > mode
-# > arm unarm
+# > arm throttle
+# > disarm
+# > mode guided
+# > mode rtl
+```
+
+### Управление SITL
+
+```bash
+./sim/sitl/run_sitl.sh status   # статус контейнера и портов
+./sim/sitl/run_sitl.sh logs     # логи SITL (Ctrl+C для выхода)
+./sim/sitl/run_sitl.sh restart  # перезапуск
+./sim/sitl/run_sitl.sh stop     # остановка
+./sim/sitl/run_sitl.sh clean    # полная очистка (образ + логи)
 ```
 
 ### ✅ Критерий успеха
 
-- `status` показывает `FC heartbeat: OK` (не STALE)
+- `./sim/sitl/run_sitl.sh start` завершается успешно (порт 5760 открыт)
+- `./sim/sitl/run_sitl.sh test` проходит без ошибок
+- `status` в REPL показывает `FC heartbeat: OK` (не STALE)
 - `arm` срабатывает, `FC armed: true` в `status`
 - `set-mode guided` меняет `FC mode: Guided`
-- `simulate-attitude` обновляет attitude (видно в `status`)
 - `abort` отправляет RTL, `FC mode: Rtl`
+- 7 интеграционных тестов проходят (`cargo test -- --include-ignored`)
 - QGroundControl (если запущен) видит те же изменения
+- Latency команды (от ввода до изменения режима) < 1 сек
+
+### Структура файлов SITL
+
+```
+sim/sitl/
+├── Dockerfile           # Сборка ArduPilot из исходников
+├── docker-compose.yml   # Конфигурация контейнера
+├── sitl_params.parm     # Параметры ArduPilot (arm без RC, и т.д.)
+├── sitl-config.toml     # Конфиг auto-targeting для SITL
+├── run_sitl.sh          # Helper-скрипт (start/stop/test/logs/...)
+└── README.md            # Подробная документация
+```
 
 ### Остановка SITL
 
 ```bash
-cd sim/sitl
-docker compose down
+./sim/sitl/run_sitl.sh stop
 ```
 
 ---

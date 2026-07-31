@@ -1,0 +1,70 @@
+# SITL Parameters — безопасные настройки для тестирования
+#
+# Этот файл загружается SITL при запуске (--add-param-file).
+# Настройки подобраны для безопасного HITL-тестирования без реального полёта.
+
+# === ARM ===
+# Разрешить arm без RC-пульта (для companion computer)
+ARMING_REQUIRE 0
+# Разрешить arm без GPS lock (для indoor тестов)
+ARMING_CHECK 0
+# Разрешить arm без проверки напряжения
+FS_BATT_ENABLE 0
+
+# === FLIGHT MODES ===
+# Mode 6 (FLY BY WIRE_A) — режим по умолчанию
+# Mode 15 (GUIDED) — для companion computer
+MODE 6
+
+# === RC OVERRIDE ===
+# Разрешить override с companion computer (важно для нас!)
+SYSID_MYGCS 255
+# Разрешить MAVLink управление
+MAV_OPTIONS 0
+
+# === GPS ===
+# Симулировать GPS lock (SITL делает это автоматически, но явно)
+GPS_TYPE 1
+SIM_GPS_TYPE 1
+# Начальные координаты (по умолчанию — Canberra, Australia)
+SIM_LAT -35.363261
+SIM_LNG 149.165230
+SIM_ALT 584.0
+
+# === SIMULATION ===
+# Скорость симуляции (1.0 = реальное время)
+SIM_SPEEDUP 1.0
+# Включить физику
+SIM_BAR2_DISABLE 1
+
+# === SERIAL PORTS ===
+# Serial 0 — MAVLink (USB CDC, 115200)
+SERIAL0_PROTOCOL 2
+SERIAL0_BAUD 115
+# Serial 1 — MAVLink (UART, 57600)
+SERIAL1_PROTOCOL 2
+SERIAL1_BAUD 57
+
+# === TELEM ===
+# Отправлять телеметрию на companion computer
+TELEM1_DELAY 10
+SR0_POSITION 5
+SR0_EXTRA1 5
+SR0_EXTRA2 5
+SR0_EXTRA3 2
+SR0_PARAMS 10
+SR0_RC_RAW 0
+
+# === LIMITS ===
+# Ограничения для безопасности
+RTL_ALT 1000
+RTL_ALT_FINAL 500
+LAND_FLAP_PERCNT 100
+
+# === FAILSAFE ===
+# RTL при потере связи
+FS_SHORT_ACTN 0
+FS_SHORT_TIMEOUT 5
+FS_LONG_ACTN 1
+FS_LONG_TIMEOUT 15
+FS_GCS_ENABLE 0

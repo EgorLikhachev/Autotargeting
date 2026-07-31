@@ -1,39 +1,91 @@
 # SITL — Software In The Loop
 #
-# Phase 0: stub only. This docker-compose is the target shape; actual
-# ArduPilot SITL + Gazebo integration lands in Phase 6.
+# Запускает ArduPilot SITL в Docker контейнере.
+# MAVLink доступен по TCP на 127.0.0.1:5760
 #
-# To use (Phase 6):
+# Запуск:
+#   cd sim/sitl
 #   docker compose up -d
-#   # MAVLink is now available at udp://127.0.0.1:14550
-#   cargo run -p auto-targeting-cli -- --config sitl-config.toml
+#   # Проверить: docker compose logs -f sitl
+#   # MAVLink на: tcp://127.0.0.1:5760
 #
-# sitl-config.toml should set:
-#   [fc]
-#   adapter = "sitl-mavlink"
-#   endpoint = "127.0.0.1:14550"
+# Подключение auto-targeting:
+#   AT_FC__ADAPTER=ardupilot-mavlink \
+#   AT_FC__ENDPOINT=tcpout:127.0.0.1:5760 \
+#   cargo run -p auto-targeting-cli -- --repl
+#
+# Остановка:
+#   docker compose down
 
 version: "3.8"
 
 services:
   sitl:
-    # ArduPilot SITL — runs the same firmware as the real FC, in user-space.
-    # Image: https://hub.docker.com/r/ardupilot/ardupilot-sitl
-    image: ardupilot/ardupilot-sitl:latest
-    # Plane model — fixed-wing UAV
-    command: ["--model", "plane", "--instance", "1"]
+    # Образ собирается из Dockerfile в этой директории.
+    # Первый запуск — ~10 минут (компиляция ArduPilot).
+    # Последующие запуски — мгновенно (кэш Docker).
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: auto-targeting-sitl:latest
+    container_name: auto-targeting-sitl
+
+    # Модель Plane (самолёт) — соответствует нашему fixed-wing UAV
+    command: >
+      bash -c "
+      /ardupilot/build/sitl/bin/sim_vehicle.py
+      --vehicle ArduPlane
+      --frame plane
+      --instance 1
+      --no-mavproxy
+      --out=udp:0.0.0.0:14550
+      --map
+      "
+    # Альтернативная команда (без sim_vehicle.py, прямой SITL):
+    # command: >
+    #   bash -c "
+    #   cd /ardupilot &&
+    #   ./Tools/autotest/sim_vehicle.py
+    #   --vehicle ArduPlane
+    #   --frame plane
+    #   --no-mavproxy
+    #   --add-param-file=/sitl_params.parm
+    #   "
+
     ports:
-      - "5760:5760"   # MAVLink TCP (for ground stations like QGroundControl)
-      - "5762:5762"   # MAVLink TCP #2
-      - "5763:5763"   # MAVLink UDP (for companion computer — our use case)
+      # TCP MAVLink — основной порт для companion computer
+      - "5760:5760"
+      # TCP MAVLink #2 — для второго ground station
+      - "5762:5762"
+      # UDP MAVLink — альтернативный порт (SITL отправляет сюда телеметрию)
+      - "5763:5763/udp"
+      # UDP 14550 — companion computer (если используем udpin в adapter)
+      - "14550:14550/udp"
+      # FGFS protocol (для FlightGear визуализации, опционально)
+      - "5501:5501/udp"
+      - "5502:5502/udp"
+
     volumes:
-      - ./scenarios:/scenarios:ro
+      # Тестовые параметры (arm без RC, GUIDED mode по умолчанию)
+      - ./sitl_params.parm:/sitl_params.parm:ro
+      # Сохранение логов SITL между перезапусками
+      - sitl_logs:/ardupilot/logs
+
+    # SITL нужен доступ к X11 для --map (опционально, можно убрать)
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+
+    # Host networking — альтернатива port mapping (раскомментировать если port mapping не работает)
+    # network_mode: host
+
     restart: unless-stopped
 
-  # Phase 6: add Gazebo for physics simulation
-  # gazebo:
-  #   image: gazebo/gazebo:classic
-  #   ports:
-  #     - "11345:11345"
-  #   depends_on: [sitl]
-  #   restart: unless-stopped
+    # Лимиты ресурсов (SITL потребляет ~1 CPU)
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+volumes:
+  sitl_logs:
