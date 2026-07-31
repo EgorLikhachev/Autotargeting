@@ -9,8 +9,31 @@
 
 pub mod mock;
 pub mod rate_limiter;
+pub mod sitl_mavlink;
 pub mod traits;
 
 pub use mock::MockFcAdapter;
 pub use rate_limiter::CommandRateLimiter;
+pub use sitl_mavlink::{SittlConfig, SittlMavlinkAdapter, TelemetryCache};
 pub use traits::{FcError, FlightControllerAdapter};
+
+/// Construct an adapter by name from the common FcConfig.
+///
+/// This is the factory function used by the CLI to pick the right adapter
+/// based on `config.fc.adapter`.
+pub fn build_adapter(cfg: &common::FcConfig) -> Box<dyn FlightControllerAdapter> {
+    match cfg.adapter.as_str() {
+        "mock" => Box::new(MockFcAdapter::new()),
+        "sitl-mavlink" => Box::new(SittlMavlinkAdapter::from_common(cfg)),
+        "ardupilot-mavlink" => {
+            tracing::warn!(
+                "ardupilot-mavlink adapter not yet implemented (Phase 4), using mock as fallback"
+            );
+            Box::new(MockFcAdapter::new())
+        }
+        other => {
+            tracing::warn!(adapter = other, "unknown FC adapter, falling back to mock");
+            Box::new(MockFcAdapter::new())
+        }
+    }
+}

@@ -16,6 +16,7 @@ parking_lot = { workspace = true }
 chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+mavlink = { version = "0.18", features = ["dialect-ardupilotmega", "transport-udp", "transport-tcp"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

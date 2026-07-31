@@ -9,6 +9,7 @@
 
 mod args;
 mod operator;
+mod repl;
 
 use anyhow::Result;
 use args::{CliArgs, RunMode};
@@ -16,7 +17,9 @@ use clap::Parser;
 use common::AppConfig;
 use fc_adapter::FlightControllerAdapter;
 use operator::OperatorCommand;
+use parking_lot::Mutex as PlMutex;
 use std::sync::Arc;
+use tokio::sync::Mutex as TokioMutex;
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
@@ -42,6 +45,7 @@ async fn main() -> Result<()> {
         RunMode::Full => run_full(config).await,
         RunMode::MockFc => run_mock_fc(config).await,
         RunMode::MockAll => run_mock_all(config).await,
+        RunMode::Repl => run_repl(config).await,
         RunMode::HealthCheck => {
             // Stub: in Phase 5 we'll expose an HTTP health endpoint.
             println!(
@@ -226,4 +230,87 @@ async fn handle_operator_command(
 ) -> Result<()> {
     // Stub for Phase 5
     Ok(())
+}
+
+/// Run the interactive REPL (operator console).
+/// Uses MockFcAdapter so it works without real hardware.
+async fn run_repl(config: AppConfig) -> Result<()> {
+    use std::time::Duration;
+
+    info!("Starting REPL (operator console)");
+
+    // Create mock FC
+    let mut fc = fc_adapter::MockFcAdapter::new();
+    fc.connect().await?;
+    fc.arm().await?;
+    fc.set_mode(common::FlightMode::Guided).await?;
+
+    // Wrap in shared state
+    let state = Arc::new(PlMutex::new(commander::StateMachine::new(
+        common::SystemState::Idle,
+    )));
+    // Transition to ARMED to match the FC state
+    {
+        let mut sm = state.lock();
+        sm.try_transition(common::SystemState::Armed)?;
+        sm.try_transition(common::SystemState::Scanning)?;
+    }
+    let fc = Arc::new(TokioMutex::new(fc));
+
+    // Create watchdogs
+    let watchdogs = Arc::new(commander::WatchdogRegistry::new());
+    watchdogs.register(
+        commander::WatchdogId::VideoLoop,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.commander.video_loop_wdt_ms),
+            commander::watchdogs::WatchdogAction::Degrade,
+        ),
+    );
+    watchdogs.register(
+        commander::WatchdogId::InferenceLoop,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.commander.inference_loop_wdt_ms),
+            commander::watchdogs::WatchdogAction::Degrade,
+        ),
+    );
+    watchdogs.register(
+        commander::WatchdogId::TrackingLoop,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.commander.tracking_loop_wdt_ms),
+            commander::watchdogs::WatchdogAction::Degrade,
+        ),
+    );
+    watchdogs.register(
+        commander::WatchdogId::CommandLoop,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.commander.command_loop_wdt_ms),
+            commander::watchdogs::WatchdogAction::Abort,
+        ),
+    );
+    watchdogs.register(
+        commander::WatchdogId::FcHeartbeat,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.fc.heartbeat_timeout_ms),
+            commander::watchdogs::WatchdogAction::Abort,
+        ),
+    );
+
+    // Create anti-loop guard
+    let anti_loop = Arc::new(commander::AntiLoopGuard::new(config.commander.clone()));
+
+    // Spawn a background task that simulates the loops feeding watchdogs
+    let wd_bg = Arc::clone(&watchdogs);
+    tokio::spawn(async move {
+        let interval = Duration::from_millis(50);
+        loop {
+            wd_bg.feed(commander::WatchdogId::VideoLoop);
+            wd_bg.feed(commander::WatchdogId::InferenceLoop);
+            wd_bg.feed(commander::WatchdogId::TrackingLoop);
+            wd_bg.feed(commander::WatchdogId::CommandLoop);
+            tokio::time::sleep(interval).await;
+        }
+    });
+
+    let ctx = repl::ReplContext::new(state, fc, watchdogs, anti_loop);
+    repl::run_repl(ctx).await
 }

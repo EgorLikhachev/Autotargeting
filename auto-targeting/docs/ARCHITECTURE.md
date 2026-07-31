@@ -13,33 +13,34 @@ hypotheses that justify them.
 ```
 ┌─────────────────┐    Frame (NV12)    ┌──────────────────┐
 │  video-capture  │ ─────────────────► │  cv-inference    │
-│  (V4L2 + MJPEG) │   shared mem       │  (Rust + C++     │
-└─────────────────┘                    │   RKNN bridge)   │
-                                       └────────┬─────────┘
+│  (V4L2 + MJPEG  │   shared mem       │  (Rust + C++     │
+│   or synthetic) │                    │   RKNN bridge)   │
+└─────────────────┘                    └────────┬─────────┘
                                                 │ Vec<Detection>
                                                 ▼
 ┌─────────────────┐  TargetState      ┌──────────────────┐
 │   commander     │ ◄───────────────  │ target-tracker   │
-│ (state machine, │                   │ (Kalman + SORT)  │
-│  watchdogs)     │                   └──────────────────┘
-└────────┬────────┘
+│ (state machine, │                   │ (Kalman + IoU    │
+│  watchdogs)     │                   │  matching)       │
+└────────┬────────┘                   └──────────────────┘
          │ Commands (ROI, position target)
          ▼
 ┌─────────────────┐   MAVLink     ┌──────────────────┐
 │  fc-adapter     │ ────────────► │  ArduPilot FC    │
-│ (HAL trait)     │ ◄──────────── │ (SpeedyBee F405) │
-└─────────────────┘  Telemetry    └──────────────────┘
+│ (HAL trait)     │ ◄──────────── │ (SpeedyBee F405  │
+└─────────────────┘  Telemetry    │  or SITL)        │
+                                  └──────────────────┘
 ```
 
 | Crate | Role | Status |
 |---|---|---|
-| `common` | Shared types, errors, config | ✅ Phase 0 |
-| `video-capture` | V4L2 capture, MJPEG decode | 🚧 skeleton |
-| `cv-inference` | Rust orchestrator for RKNN bridge | 🚧 skeleton |
-| `target-tracker` | Kalman filter + multi-target tracker | 🚧 skeleton |
-| `fc-adapter` | `FlightControllerAdapter` trait + impls | ✅ Mock impl |
-| `commander` | State machine + watchdogs + anti-loop | ✅ Phase 0 |
-| `cli` | Binary entry point + operator CLI | ✅ Phase 0 (mock mode) |
+| `common` | Shared types, errors, config | ✅ Complete |
+| `video-capture` | V4L2 + synthetic + replay sources | ✅ Synthetic + Replay; V4L2 stub |
+| `cv-inference` | Rust orchestrator for RKNN bridge | 🚧 Stub + Mock + NMS |
+| `target-tracker` | Kalman filter + IoU tracker | ✅ Single-target working |
+| `fc-adapter` | `FlightControllerAdapter` trait + impls | ✅ Mock + SITL; ArduPilot stub |
+| `commander` | State machine + watchdogs + anti-loop | ✅ Phase 0 complete |
+| `cli` | Binary + interactive REPL | ✅ REPL working |
 
 ## FC abstraction (HAL)
 
@@ -52,26 +53,65 @@ Implementations:
 
 | Implementation | Transport | Status |
 |---|---|---|
-| `ArduPilotMavlinkAdapter` | MAVLink v2 over UART/USB | 🚧 Phase 4 |
-| `SittlMavlinkAdapter` | MAVLink v2 over UDP | 🚧 Phase 4 |
-| `MockFcAdapter` | In-memory | ✅ Working |
+| `ArduPilotMavlinkAdapter` | MAVLink v2 over UART/USB | 🚧 Phase 4 (stub falls back to Mock) |
+| `SittlMavlinkAdapter` | MAVLink v2 over UDP | ✅ Working (9 tests) |
+| `MockFcAdapter` | In-memory | ✅ Working (10 tests) |
 
-See ADR-0001 (pending) for the C++ RKNN bridge decision, and HYPOTHESES.md
-H-002 for the MAVLink 10 Hz streaming assumption.
+Factory function: `fc_adapter::build_adapter(&config.fc)` picks the right
+adapter based on `config.fc.adapter` string (`"mock"`, `"sitl-mavlink"`,
+`"ardupilot-mavlink"`).
+
+See ADR-0001 for the C++ RKNN bridge decision, and HYPOTHESES.md H-002 for
+the MAVLink 10 Hz streaming assumption.
 
 ## Anti-loop protection
 
-Six layers, see `crates/commander/src/`:
+Seven layers, see `crates/commander/src/` and `deploy/systemd/`:
 
 | Layer | Where | Status |
 |---|---|---|
-| 1. Per-loop watchdog timers | `watchdogs.rs` | ✅ Working |
-| 2. State machine with deterministic transitions | `state_machine.rs` | ✅ Working |
+| 1. Per-loop watchdog timers | `watchdogs.rs` | ✅ Working (5 watchdogs) |
+| 2. State machine with deterministic transitions | `state_machine.rs` | ✅ Working (9 states) |
 | 3. Deadband + hysteresis + bounding limits | `anti_loop.rs` | ✅ Working |
-| 4. Rate limiter | `crates/fc-adapter/src/rate_limiter.rs` | ✅ Working |
+| 4. Rate limiter | `crates/fc-adapter/src/rate_limiter.rs` | ✅ Working (10 Hz) |
 | 5. Oscillation detector | `anti_loop.rs` | ✅ Working |
 | 6. Safety pilot RC override | ArduPilot config | 🚧 Phase 7 |
-| 7. systemd `WatchdogSec` | `deploy/systemd/auto-targeting.service` | 🚧 Phase 0.9 |
+| 7. systemd `WatchdogSec` | `deploy/systemd/auto-targeting.service` | ✅ Configured (10 s) |
+
+## CLI modes
+
+```bash
+# Interactive REPL (operator console) — Phase 5.6 ✅
+cargo run -p auto-targeting-cli -- --repl
+
+# Smoke test with all mocks — Phase 0 ✅
+cargo run -p auto-targeting-cli -- --mock-all
+
+# Health check (for systemd) — Phase 0 ✅
+cargo run -p auto-targeting-cli -- --health-check
+
+# Full production mode — Phase 5 🚧
+cargo run -p auto-targeting-cli -- --config /etc/auto-targeting/config.toml
+```
+
+### REPL commands
+
+| Command | Description |
+|---|---|
+| `help` | List all commands |
+| `status` | Show state machine, FC, watchdogs |
+| `arm` / `disarm` | Arm/disarm the drone |
+| `set-mode <mode>` | Change FC mode (guided, rtl, loiter, manual, auto, stabilize) |
+| `scan` | Start scanning for targets |
+| `select-target <id>` | Select a target, transition to TRACKING |
+| `abort` | ABORT (force transition + RTL) |
+| `reset` | Return to IDLE (after ABORT + disarm) |
+| `watchdogs` | Show watchdog statuses |
+| `anti-loop` | Show anti-loop guard stats |
+| `feed-watchdog <name>` | Manually feed a watchdog |
+| `simulate-heartbeat-loss` | Test: simulate FC heartbeat loss |
+| `simulate-attitude <r p y>` | Test: inject attitude update |
+| `quit` | Exit |
 
 ## Configuration
 
@@ -97,12 +137,36 @@ rustup target add aarch64-unknown-linux-gnu
 cargo build --release --target aarch64-unknown-linux-gnu
 ```
 
-## Running
+## Testing
 
 ```bash
-# Phase 0 smoke test (mock everything, no hardware)
-cargo run -p auto-targeting-cli -- --mock-all
+# All tests
+cargo test --workspace
 
-# Health check (for systemd / healthcheck scripts)
-cargo run -p auto-targeting-cli -- --health-check
+# Vivid-gated tests (requires `sudo modprobe vivid`)
+sudo modprobe vivid
+cargo test -p video-capture -- --include-ignored vivid
+
+# REPL smoke test
+echo -e "help\nstatus\narm\nabort\nquit" | cargo run -p auto-targeting-cli -- --repl
 ```
+
+## ADRs (Architecture Decision Records)
+
+| ADR | Title | Status |
+|---|---|---|
+| 0001 | RKNN Inference via C++ Bridge Microservice | Accepted |
+| 0002 | Tracking Algorithm — IoU + Kalman | Accepted |
+| TEMPLATE | Template for new ADRs | — |
+
+See `docs/ADR/` for full text.
+
+## Hypotheses
+
+See `docs/HYPOTHESES.md` for the full log. Critical hypotheses that block
+Flight Readiness:
+
+- H-001: Mature Rust bindings for RKNPU2 SDK (CRITICAL)
+- H-002: ArduPilot handles 10 Hz MAVLink streaming (CRITICAL)
+- H-003: Arducam UC-852 V4L2 + MJPEG support (HIGH)
+- H-004: `mavlink` Rust crate stability (HIGH) — partially confirmed in Phase 4.8

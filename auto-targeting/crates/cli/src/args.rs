@@ -30,6 +30,11 @@ pub struct CliArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     pub health_check: bool,
 
+    /// Start the interactive REPL (operator console).
+    /// Requires --mock-fc or --mock-all (real FC not yet supported in REPL).
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub repl: bool,
+
     /// Increase verbosity. Can be repeated: -v, -vv, -vvv.
     #[arg(short, long, action = ArgAction::Count)]
     pub verbose: u8,
@@ -41,11 +46,14 @@ pub enum RunMode {
     MockFc,
     MockAll,
     HealthCheck,
+    Repl,
 }
 
 impl CliArgs {
     pub fn mode(&self) -> RunMode {
-        if self.health_check {
+        if self.repl {
+            RunMode::Repl
+        } else if self.health_check {
             RunMode::HealthCheck
         } else if self.mock_all {
             RunMode::MockAll

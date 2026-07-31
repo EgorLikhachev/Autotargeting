@@ -1,6 +1,6 @@
 # ADR-0001: RKNN Inference via C++ Bridge Microservice
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-08-01
 - **Decision makers:** TBD
 - **Related hypotheses:** H-001
@@ -32,6 +32,124 @@ avoid copies.
 │  bridge_client.rs   │   Vec<Detection>    │                  │
 └─────────────────────┘                     └──────────────────┘
 ```
+
+## RKNN Bridge Protocol Specification
+
+### Transport
+
+- **Control channel:** Unix domain socket at `/tmp/rknn-bridge.sock`
+  (configurable via `[inference] bridge_socket`).
+- **Frame data channel:** shared memory via `memfd_create()` with a name
+  derived from the frame sequence number. The Rust side creates the memfd,
+  writes the frame, sends the fd via SCM_RIGHTS over the Unix socket.
+- **Response:** the bridge writes detections back to the Unix socket as a
+  length-prefixed JSON message.
+
+### Message types
+
+#### 1. Init (Rust → Bridge)
+
+Sent once at startup to load the model.
+
+```json
+{
+  "type": "init",
+  "model_path": "/opt/auto-targeting/models/yolov8n_int8.rknn",
+  "input_width": 1280,
+  "input_height": 720,
+  "input_format": "nv12",
+  "confidence_threshold": 0.45,
+  "nms_threshold": 0.45
+}
+```
+
+Response:
+```json
+{"type":"init_ack","ok":true,"output_classes":80,"backend":"rknn"}
+```
+or
+```json
+{"type":"init_ack","ok":false,"error":"model not found"}
+```
+
+#### 2. Infer (Rust → Bridge)
+
+Sent for each frame. Frame data is passed via shared memory (the `memfd`
+fd is sent as ancillary data via `SCM_RIGHTS`).
+
+```json
+{
+  "type": "infer",
+  "frame_seq": 12345,
+  "shm_fd": "<passed via SCM_RIGHTS>",
+  "shm_size": 1382400,
+  "captured_at_ms": 1698230400000
+}
+```
+
+Response (detections as JSON array):
+```json
+{
+  "type": "infer_ack",
+  "frame_seq": 12345,
+  "latency_ms": 42,
+  "detections": [
+    {
+      "bbox": {"x": 100, "y": 200, "width": 60, "height": 80},
+      "class": "person",
+      "class_id": 0,
+      "confidence": 0.92
+    }
+  ]
+}
+```
+
+#### 3. Health Check (Rust → Bridge)
+
+Sent periodically (every 5 s) and on reconnect.
+
+```json
+{"type":"health"}
+```
+
+Response:
+```json
+{"type":"health_ack","ok":true,"npu_utilization":0.65,"model_loaded":true}
+```
+
+#### 4. Shutdown (Rust → Bridge)
+
+Sent on graceful shutdown.
+
+```json
+{"type":"shutdown"}
+```
+
+### Error handling
+
+- If the bridge doesn't respond within `inference_loop_wdt_ms` (200 ms), the
+  Rust side considers the inference failed and the watchdog fires.
+- On bridge crash, the Rust side attempts reconnect every 1 s for 30 s,
+  then gives up and switches to `CpuInferenceBackend` if
+  `allow_cpu_fallback = true`.
+
+### Performance budget
+
+| Operation | Budget | Notes |
+|---|---|---|
+| Frame copy to SHM | < 2 ms | Use `memcpy` on mmap'd memfd |
+| Unix socket send | < 1 ms | Small control message |
+| RKNN inference | 30–50 ms | NPU INT8 YOLOv8n on 720p |
+| NMS (in C++) | < 5 ms | Greedy NMS, ~10 detections |
+| Response parse | < 1 ms | JSON, ~1 KB typical |
+| **Total** | **< 60 ms** | Meets KPI |
+
+### Why not Cap'n Proto / FlatBuffers?
+
+JSON is sufficient for the response (small array of detections). The frame
+data goes through SHM, not the socket, so serialization overhead is minimal.
+If profiling shows JSON parsing as a bottleneck, we can switch to Cap'n Proto
+without changing the SHM layer.
 
 ## Consequences
 
@@ -66,8 +184,7 @@ avoid copies.
 
 - C++ bridge: `rknn-bridge/` directory, built with CMake.
 - Rust client: `crates/cv-inference/src/backend.rs` → `RknnBridgeClient`.
-- Protocol: length-prefixed JSON for control messages, raw SHM for frame
-  data. (May switch to Cap'n Proto / FlatBuffers in Phase 2 if JSON parsing
-  shows up in profiles.)
 - Deployment: both binaries run as separate systemd units
   (`auto-targeting.service` and `rknn-bridge.service`).
+- The `rknn-bridge.service` is a dependency of `auto-targeting.service`
+  (`After=rknn-bridge.service` in the systemd unit).

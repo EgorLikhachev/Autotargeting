@@ -44,6 +44,18 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --verbose
 
+      - name: Run V4L2 vivid tests (requires vivid kernel module)
+        env:
+          VIVID_TESTS: "1"
+        run: |
+          sudo modprobe vivid 2>/dev/null || true
+          if ls /dev/video* 2>/dev/null; then
+            echo "vivid loaded — running vivid-gated tests"
+            cargo test -p video-capture -- --include-ignored vivid
+          else
+            echo "vivid not available — skipping vivid-gated tests"
+          fi
+
       - name: Check for known vulnerabilities
         run: |
           cargo install cargo-audit --locked

@@ -28,3 +28,4 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 chrono = { workspace = true }
 parking_lot = { workspace = true }
+rustyline = "14.0"
