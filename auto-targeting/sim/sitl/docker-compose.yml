@@ -1,0 +1,39 @@
+# SITL — Software In The Loop
+#
+# Phase 0: stub only. This docker-compose is the target shape; actual
+# ArduPilot SITL + Gazebo integration lands in Phase 6.
+#
+# To use (Phase 6):
+#   docker compose up -d
+#   # MAVLink is now available at udp://127.0.0.1:14550
+#   cargo run -p auto-targeting-cli -- --config sitl-config.toml
+#
+# sitl-config.toml should set:
+#   [fc]
+#   adapter = "sitl-mavlink"
+#   endpoint = "127.0.0.1:14550"
+
+version: "3.8"
+
+services:
+  sitl:
+    # ArduPilot SITL — runs the same firmware as the real FC, in user-space.
+    # Image: https://hub.docker.com/r/ardupilot/ardupilot-sitl
+    image: ardupilot/ardupilot-sitl:latest
+    # Plane model — fixed-wing UAV
+    command: ["--model", "plane", "--instance", "1"]
+    ports:
+      - "5760:5760"   # MAVLink TCP (for ground stations like QGroundControl)
+      - "5762:5762"   # MAVLink TCP #2
+      - "5763:5763"   # MAVLink UDP (for companion computer — our use case)
+    volumes:
+      - ./scenarios:/scenarios:ro
+    restart: unless-stopped
+
+  # Phase 6: add Gazebo for physics simulation
+  # gazebo:
+  #   image: gazebo/gazebo:classic
+  #   ports:
+  #     - "11345:11345"
+  #   depends_on: [sitl]
+  #   restart: unless-stopped

@@ -1,0 +1,54 @@
+# Auto-Targeting System — example configuration.
+# Copy to config.toml and edit as needed.
+# Environment overrides: prefix with AT_, sections separated by __.
+# Example: AT_VIDEO__DEVICE=/dev/video1
+
+[video]
+device = "/dev/video0"
+width = 1280
+height = 720
+fps = 30
+format = "mjpeg"           # "nv12" | "yuyv" | "mjpeg"
+queue_depth = 3
+
+[inference]
+model_path = "/opt/auto-targeting/models/yolov8n_int8.rknn"
+confidence_threshold = 0.45
+nms_threshold = 0.45
+track_classes = ["person"]
+bridge_socket = "/tmp/rknn-bridge.sock"
+allow_cpu_fallback = false
+
+[tracker]
+max_target_age_ms = 2000
+max_missed_frames = 60
+lock_confirmation_frames = 3
+match_iou_threshold = 0.3
+
+[fc]
+adapter = "mock"          # "ardupilot-mavlink" | "sitl-mavlink" | "mock"
+endpoint = "127.0.0.1:14550"
+baud_rate = 115200
+system_id = 1
+component_id = 1
+target_system_id = 1
+target_component_id = 1
+command_rate_hz = 10
+heartbeat_timeout_ms = 1000
+
+[commander]
+video_loop_wdt_ms = 100
+inference_loop_wdt_ms = 200
+tracking_loop_wdt_ms = 50
+command_loop_wdt_ms = 100
+deadband_fraction = 0.05
+loss_hysteresis_ms = 500
+max_yaw_rate_dps = 30.0
+max_pitch_rate_dps = 15.0
+max_offset_fraction = 0.30
+oscillation_window = 30
+oscillation_threshold = 0.5
+oscillation_abort_count = 3
+
+log_file = "/var/log/auto-targeting/auto-targeting.log"
+log_filter = "info,auto_targeting=debug"

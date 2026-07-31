@@ -1,0 +1,10 @@
+# Clippy configuration for Auto-Targeting System
+# Strict lints — safety-critical embedded codebase
+
+msrv = "1.75.0"
+
+# Cognitive complexity — keep functions readable
+cognitive-complexity-threshold = 25
+
+# Allow some false positives in tests
+too-many-arguments-threshold = 8

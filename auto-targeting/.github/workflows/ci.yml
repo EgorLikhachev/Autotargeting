@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # Fast checks on every PR — target < 5 min
+  pr-check:
+    name: PR check (fmt, clippy, test)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --verbose
+
+      - name: Check for known vulnerabilities
+        run: |
+          cargo install cargo-audit --locked
+          cargo audit
+
+      # Optional — cargo-deny checks licenses and bans
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: Run cargo-deny
+        run: cargo deny check
+
+  # Cross-compile for Orange Pi 5 (aarch64) — target < 10 min
+  cross-compile:
+    name: Cross-compile (aarch64)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: pr-check
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install aarch64 cross toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-aarch64-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Configure cargo for cross-compilation
+        run: |
+          mkdir -p ~/.cargo
+          cat >> ~/.cargo/config.toml << 'EOF'
+          [target.aarch64-unknown-linux-gnu]
+          linker = "aarch64-linux-gnu-gcc"
+          EOF
+
+      - name: Build for aarch64
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p auto-targeting-cli
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: auto-targeting-aarch64
+          path: |
+            target/aarch64-unknown-linux-gnu/release/auto-targeting
+          retention-days: 14
+
+  # Smoke test the built binary in an aarch64 emulator (QEMU)
+  smoke-test:
+    name: Smoke test binary (QEMU)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    needs: cross-compile
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: auto-targeting-aarch64
+          path: ./bin
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+
+      - name: Run health check
+        run: |
+          chmod +x ./bin/auto-targeting
+          qemu-aarch64-static -L /usr/aarch64-linux-gnu ./bin/auto-targeting --health-check

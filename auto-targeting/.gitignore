@@ -1,0 +1,48 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (local overrides — use config.example.toml as template)
+/config.toml
+/config.local.toml
+
+# Logs
+*.log
+/logs/
+
+# Models (large binary files — use git-lfs or external storage)
+*.rknn
+*.onnx
+*.tflite
+
+# Build artifacts
+*.o
+*.so
+*.a
+*.dylib
+
+# CMake (for rknn-bridge)
+rknn-bridge/build/
+rknn-bridge/CMakeFiles/
+rknn-bridge/cmake_install.cmake
+rknn-bridge/Makefile
+
+# Ansible
+deploy/ansible/*.retry
+
+# SITL runtime artifacts
+sim/sitl/eeprom.bin
+sim/sitl/*.tlog
+sim/sitl/*.bin

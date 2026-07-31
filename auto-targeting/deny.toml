@@ -1,0 +1,53 @@
+# cargo-deny configuration
+# Run: cargo deny check
+
+[advisories]
+# Fail on advisories with severity >= medium
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "deny"
+notice = "warn"
+# Ignore specific advisories here (with reason)
+ignore = []
+
+[licenses]
+# Allow common permissive licenses
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Zlib",
+    "CC0-1.0",
+    "MPL-2.0",
+]
+# Deny copyleft / proprietary licenses
+deny = [
+    "GPL-2.0",
+    "GPL-3.0",
+    "AGPL-3.0",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[bans]
+# Warn on multiple versions of the same crate
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+# Allow specific duplicate versions (workarounds)
+skip = [
+    # Common transitive duplicates that are hard to eliminate
+    { name = "windows-sys", version = "0.48" },
+]
+
+[sources]
+# Only allow crates from crates.io
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

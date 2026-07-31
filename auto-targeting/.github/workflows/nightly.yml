@@ -1,0 +1,58 @@
+name: Nightly
+
+on:
+  schedule:
+    # Run at 03:00 UTC daily
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  nightly:
+    name: Full SITL + benchmarks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-nightly-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Full test suite
+        run: cargo test --workspace --verbose -- --include-ignored
+
+      - name: Long-running SITL test (stub — Phase 6)
+        run: |
+          echo "TODO: spin up SITL in Docker, run 30-minute tracking scenario"
+          echo "For now, just run the mock smoke test"
+          cargo run -p auto-targeting-cli -- --mock-all
+
+      - name: Stress test — 5 minute mock run
+        run: |
+          # Run the mock smoke test for ~5 minutes by repeating it
+          for i in 1 2 3 4 5; do
+            echo "=== Iteration $i ==="
+            cargo run -p auto-targeting-cli -- --health-check
+          done
+
+      - name: Audit
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit
+
+      - name: Benchmarks (stub — Phase 6)
+        run: |
+          echo "TODO: cargo bench --workspace once benchmarks are in place"

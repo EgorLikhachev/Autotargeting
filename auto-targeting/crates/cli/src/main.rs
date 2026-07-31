@@ -1,0 +1,229 @@
+//! Auto-Targeting System — main CLI binary.
+//!
+//! Usage:
+//!   auto-targeting --config /etc/auto-targeting/config.toml
+//!   auto-targeting --mock-fc --mock-video demo
+//!
+//! Status: 🚧 Phase 0 — basic scaffolding + mock mode smoke test.
+//! Real video/inference integration lands in Phase 5.
+
+mod args;
+mod operator;
+
+use anyhow::Result;
+use args::{CliArgs, RunMode};
+use clap::Parser;
+use common::AppConfig;
+use fc_adapter::FlightControllerAdapter;
+use operator::OperatorCommand;
+use std::sync::Arc;
+use tracing::{info, warn};
+use tracing_subscriber::{fmt, prelude::*, EnvFilter};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let args = CliArgs::parse();
+
+    // Load config (or defaults if not provided / not parseable)
+    let config_path = args.config.as_ref().and_then(|p| p.to_str());
+    let config = AppConfig::load_or_default(config_path);
+
+    // Initialize tracing
+    init_tracing(&config.log_filter, config.log_file.as_deref())?;
+
+    info!(
+        version = env!("CARGO_PKG_VERSION"),
+        mode = ?args.mode(),
+        "auto-targeting system starting"
+    );
+
+    // Run according to mode
+    match args.mode() {
+        RunMode::Full => run_full(config).await,
+        RunMode::MockFc => run_mock_fc(config).await,
+        RunMode::MockAll => run_mock_all(config).await,
+        RunMode::HealthCheck => {
+            // Stub: in Phase 5 we'll expose an HTTP health endpoint.
+            println!(
+                "{{\"status\":\"ok\",\"version\":\"{}\"}}",
+                env!("CARGO_PKG_VERSION")
+            );
+            Ok(())
+        }
+    }
+}
+
+fn init_tracing(filter_spec: &str, log_file: Option<&str>) -> Result<()> {
+    let filter = EnvFilter::try_new(filter_spec).unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let stdout_layer = fmt::layer().compact().with_target(true);
+
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(stdout_layer);
+
+    if let Some(path) = log_file {
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            Ok(file) => {
+                let file_layer = fmt::layer().json().with_writer(std::sync::Mutex::new(file));
+                subscriber.with(file_layer).init();
+            }
+            Err(e) => {
+                warn!(path = path, error = %e, "failed to open log file, logging to stdout only");
+                subscriber.init();
+            }
+        }
+    } else {
+        subscriber.init();
+    }
+    Ok(())
+}
+
+/// Full production mode — real video, real inference, real FC.
+/// Not yet implemented (Phase 5).
+async fn run_full(_config: AppConfig) -> Result<()> {
+    warn!("Full mode not yet implemented (Phase 5). Use --mock-fc or --mock-all for testing.");
+    Ok(())
+}
+
+/// Mock FC mode — real video + real inference, but mock FC.
+/// Not yet implemented (Phase 5).
+async fn run_mock_fc(_config: AppConfig) -> Result<()> {
+    warn!("Mock-fc mode not yet implemented (Phase 5). Use --mock-all for now.");
+    Ok(())
+}
+
+/// All-mock mode — synthetic video, mock inference, mock FC.
+/// This is the Phase 0 smoke test.
+async fn run_mock_all(config: AppConfig) -> Result<()> {
+    info!("Running in mock-all mode (Phase 0 smoke test)");
+
+    // Create mock FC
+    let mut fc = fc_adapter::MockFcAdapter::new();
+    fc.connect().await?;
+    fc.arm().await?;
+    fc.set_mode(common::FlightMode::Guided).await?;
+
+    // Create state machine
+    let mut sm = commander::StateMachine::new(common::SystemState::Idle);
+    sm.try_transition(common::SystemState::Armed)?;
+    sm.try_transition(common::SystemState::Scanning)?;
+    info!(state = sm.state().as_str(), "state machine initialized");
+
+    // Create anti-loop guard
+    let anti_loop = Arc::new(commander::AntiLoopGuard::new(config.commander.clone()));
+
+    // Create watchdog registry
+    let watchdogs = Arc::new(commander::WatchdogRegistry::new());
+    use std::time::Duration;
+    watchdogs.register(
+        commander::WatchdogId::VideoLoop,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.commander.video_loop_wdt_ms),
+            commander::watchdogs::WatchdogAction::Degrade,
+        ),
+    );
+    watchdogs.register(
+        commander::WatchdogId::FcHeartbeat,
+        commander::watchdogs::WatchdogConfig::new(
+            Duration::from_millis(config.fc.heartbeat_timeout_ms),
+            commander::watchdogs::WatchdogAction::Abort,
+        ),
+    );
+
+    // Simulate a few cycles
+    for i in 0..5 {
+        watchdogs.feed(commander::WatchdogId::VideoLoop);
+        fc.simulate_attitude(common::Attitude {
+            yaw: i as f32 * 0.1,
+            ..Default::default()
+        });
+
+        let cmd = commander::anti_loop::CorrectionCommand {
+            yaw_rate_dps: 5.0,
+            pitch_rate_dps: 0.0,
+            offset_x: 0.2,
+            offset_y: 0.1,
+            generated_at: std::time::Instant::now(),
+        };
+        let decision = anti_loop.process(cmd);
+        info!(cycle = i, ?decision, "processed command");
+
+        // In a real system, we'd send a MAVLink command here if Allow.
+        if let commander::anti_loop::GuardDecision::Allow(_) = decision {
+            fc.set_position_target_local_ned(common::PositionTargetNED {
+                north: 1.0,
+                east: 0.0,
+                down: 0.0,
+                yaw: 0.1 * i as f32,
+            })
+            .await?;
+        }
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    // Check watchdogs
+    let expired = watchdogs.check_expired();
+    info!(expired_count = expired.len(), "watchdog check complete");
+
+    // Print summary — note: we snapshot all state BEFORE calling any async
+    // method, because parking_lot::MutexGuard is not Send and cannot be held
+    // across .await points (clippy::await_holding_lock).
+    let fc_state = fc.state_handle();
+    let (cmds_len, armed, mode) = {
+        let s = fc_state.lock();
+        (s.commands.len(), s.armed, s.mode)
+    };
+    let sm_state = sm.state();
+    let sm_transitions = sm.transition_count();
+
+    let al_snap = anti_loop.snapshot();
+    let wd_snap = watchdogs.snapshot();
+
+    println!("\n=== Mock-all smoke test summary ===");
+    println!("State machine:    {}", sm_state.as_str());
+    println!("Transitions:      {}", sm_transitions);
+    println!("FC commands sent: {}", cmds_len);
+    println!("FC armed:         {}", armed);
+    println!("FC mode:          {:?}", mode);
+
+    println!("\nAnti-loop guard:");
+    println!("  Allowed:         {}", al_snap.allowed_count);
+    println!("  Suppressed:      {}", al_snap.suppressed_count);
+    println!("  Oscillations:    {}", al_snap.oscillation_trigger_count);
+
+    println!("\nWatchdogs:");
+    for w in &wd_snap {
+        println!(
+            "  {:<15} elapsed={:>5}ms / limit={:>5}ms  expired={}",
+            w.id.as_str(),
+            w.elapsed_ms,
+            w.timeout_ms,
+            w.expired
+        );
+    }
+    println!("\nAll good. ✅");
+
+    fc.disarm().await?;
+    fc.disconnect().await?;
+    Ok(())
+}
+
+/// Handle an operator command — to be wired into gRPC/HTTP in Phase 5.
+#[allow(dead_code)]
+async fn handle_operator_command(
+    _cmd: OperatorCommand,
+    _sm: &mut commander::StateMachine,
+    _fc: &mut fc_adapter::MockFcAdapter,
+) -> Result<()> {
+    // Stub for Phase 5
+    Ok(())
+}
