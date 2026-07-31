@@ -7,12 +7,16 @@
 
 pub mod anti_loop;
 pub mod commander;
+pub mod pid;
 pub mod state_machine;
+pub mod transform;
 pub mod watchdogs;
 
 pub use anti_loop::{AntiLoopGuard, CorrectionCommand, GuardDecision};
 pub use commander::{Commander, CommanderError, CommanderHealth, CommanderResult};
+pub use pid::{PidConfig, PidController, PidPair};
 pub use state_machine::{StateMachine, StateTransitionError};
+pub use transform::{CameraParams, CameraToAngular, FrameOffset, NedTarget};
 pub use watchdogs::{
     WatchdogAction, WatchdogConfig, WatchdogId, WatchdogRegistry, WatchdogSnapshot,
 };

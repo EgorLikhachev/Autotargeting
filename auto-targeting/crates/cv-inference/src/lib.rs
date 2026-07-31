@@ -16,9 +16,14 @@
 //! allows development on x86 dev machines without an NPU.
 
 pub mod backend;
+pub mod bridge_client;
 pub mod nms;
 
-pub use backend::{CpuInferenceBackend, InferenceBackend, MockInferenceBackend, RknnBridgeClient};
+pub use backend::{
+    CpuInferenceBackend, InferenceBackend, MockInferenceBackend,
+    RknnBridgeClient as RknnBridgeClientStub,
+};
+pub use bridge_client::{RknnBridgeClient, RknnBridgeConfig};
 pub use nms::non_max_suppression;
 
 pub use common::Detection;

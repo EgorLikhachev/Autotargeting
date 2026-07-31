@@ -47,6 +47,9 @@ dashmap = "6.0"
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Image processing
+jpeg-decoder = "0.3"
+
 # Async trait
 async-trait = "0.1"
 

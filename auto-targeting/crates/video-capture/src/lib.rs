@@ -15,11 +15,16 @@
 //! test patterns. Tests guarded by `#[cfg(feature = "vivid-ci")]` or by a
 //! runtime check for `/dev/video*` existence.
 
+pub mod convert;
 pub mod replay;
 pub mod synthetic;
 pub mod traits;
 pub mod v4l2_stub;
 
+pub use convert::{
+    convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, rgb24_to_nv12, yuyv_to_nv12,
+    yuyv_to_rgb24, ConversionError, ConversionResult,
+};
 pub use replay::ReplaySource;
 pub use synthetic::{SyntheticConfig, SyntheticPattern, SyntheticVideoSource};
 pub use traits::{VideoCaptureError, VideoSource};
