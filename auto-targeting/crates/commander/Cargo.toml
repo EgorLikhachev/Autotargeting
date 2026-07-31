@@ -21,3 +21,14 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+criterion = { workspace = true }
+common = { workspace = true }
+fc-adapter = { workspace = true }
+
+[[bench]]
+name = "anti_loop"
+harness = false
+
+[[bench]]
+name = "watchdogs"
+harness = false

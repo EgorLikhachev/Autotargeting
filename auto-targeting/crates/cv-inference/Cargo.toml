@@ -19,3 +19,9 @@ serde_json = { workspace = true }
 [dev-dependencies]
 tokio-test = { workspace = true }
 chrono = { workspace = true }
+criterion = { workspace = true }
+common = { workspace = true }
+
+[[bench]]
+name = "nms"
+harness = false

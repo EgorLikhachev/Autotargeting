@@ -8,9 +8,10 @@
 //! Real video/inference integration lands in Phase 5.
 
 use anyhow::Result;
-use auto_targeting_cli::args::{CliArgs, RunMode};
+use auto_targeting_cli::args::{CliArgs, Command, RunMode};
 use auto_targeting_cli::operator::OperatorCommand;
 use auto_targeting_cli::repl;
+use auto_targeting_cli::scenario_runner;
 use clap::Parser;
 use common::AppConfig;
 use fc_adapter::FlightControllerAdapter;
@@ -43,6 +44,7 @@ async fn main() -> Result<()> {
         RunMode::MockFc => run_mock_fc(config).await,
         RunMode::MockAll => run_mock_all(config).await,
         RunMode::Repl => run_repl(config).await,
+        RunMode::Scenario => run_scenario_command(args).await,
         RunMode::HealthCheck => {
             // Stub: in Phase 5 we'll expose an HTTP health endpoint.
             println!(
@@ -310,4 +312,47 @@ async fn run_repl(config: AppConfig) -> Result<()> {
 
     let ctx = repl::ReplContext::new(state, fc, watchdogs, anti_loop);
     repl::run_repl(ctx).await
+}
+
+/// Run the scenario subcommand.
+async fn run_scenario_command(args: CliArgs) -> Result<()> {
+    let command = args
+        .command
+        .expect("command should be set in scenario mode");
+    let scenario_args = match command {
+        Command::Scenario { scenario_args } => scenario_args,
+    };
+
+    match (scenario_args.file, scenario_args.all) {
+        (Some(path), None) => {
+            // Single scenario
+            let result = scenario_runner::run_scenario(&path, args.verbose > 0).await?;
+            println!("{result}");
+            if !result.passed {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        (None, Some(dir)) => {
+            // All scenarios in directory
+            let results = scenario_runner::run_all_scenarios(&dir, args.verbose > 0).await;
+            scenario_runner::print_summary(&results);
+            let any_failed = results.iter().any(|r| !r.passed);
+            if any_failed {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        (None, None) => {
+            eprintln!("Error: must specify either a scenario file or --all <dir>");
+            eprintln!("Usage:");
+            eprintln!("  auto-targeting scenario <file.json>");
+            eprintln!("  auto-targeting scenario --all <dir>");
+            std::process::exit(2);
+        }
+        (Some(_), Some(_)) => {
+            eprintln!("Error: cannot specify both a file and --all");
+            std::process::exit(2);
+        }
+    }
 }

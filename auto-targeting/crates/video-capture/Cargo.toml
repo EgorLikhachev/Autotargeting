@@ -17,6 +17,19 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+[features]
+# V4L2 support requires libclang (for v4l2-sys-mit bindings).
+# Enable on Linux targets where libclang is available:
+#   cargo build -p video-capture --features v4l2
+# On Orange Pi 5 / CI runners with libclang-dev installed, enable by default
+# in the workspace config or via --features.
+default = []
+v4l2 = ["dep:v4l"]
+
+[dependencies.v4l]
+version = "0.14"
+optional = true
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 tempfile = "3.10"

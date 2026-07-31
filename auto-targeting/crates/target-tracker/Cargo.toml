@@ -19,3 +19,14 @@ serde = { workspace = true }
 [dev-dependencies]
 tokio-test = { workspace = true }
 proptest = { workspace = true }
+criterion = { workspace = true }
+common = { workspace = true }
+chrono = { workspace = true }
+
+[[bench]]
+name = "kalman"
+harness = false
+
+[[bench]]
+name = "tracker"
+harness = false

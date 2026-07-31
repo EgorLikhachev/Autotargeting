@@ -6,3 +6,4 @@ pub mod args;
 pub mod integration_test_helpers;
 pub mod operator;
 pub mod repl;
+pub mod scenario_runner;

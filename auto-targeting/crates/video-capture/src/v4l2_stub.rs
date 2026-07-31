@@ -1,53 +1,33 @@
-//! V4L2 video source — opens `/dev/videoN` via the Linux V4L2 API.
+//! V4L2 video source — STUB (no `v4l2` feature).
 //!
-//! ## Status: 🚧 Phase 1 stub
+//! This is the fallback when the `v4l2` feature is not enabled.
+//! It provides the same API surface (V4l2Source struct, device discovery
+//! utilities) but `start()` always returns an error.
 //!
-//! The real implementation will use the `v4l` crate (or `v4l2` crate) to:
-//! 1. Open the device file.
-//! 2. Negotiate format (MJPEG preferred for USB cameras — saves USB bandwidth).
-//! 3. Queue buffers (mmap or userptr).
-//! 4. Dequeue frames in a loop.
+//! Enable V4L2 support with:
+//!   cargo build -p video-capture --features v4l2
 //!
-//! ## CI testing strategy (Phase 1.7)
-//!
-//! GitHub Actions Ubuntu runners have the `vivid` kernel module available.
-//! `vivid` creates synthetic V4L2 devices that produce test patterns —
-//! perfect for CI without real hardware.
-//!
-//! ```yaml
-//! # In .github/workflows/ci.yml
-//! - name: Load vivid kernel module
-//!   run: sudo modprobe vivid
-//!
-//! - name: Verify /dev/video0 exists
-//!   run: ls -la /dev/video0
-//!
-//! - name: Run V4L2 tests
-//!   run: cargo test -p video-capture --features vivid-tests -- --include-ignored
-//! ```
-//!
-//! Tests guarded by `#[cfg(feature = "vivid-tests")]` only run when the
-//! feature is enabled (and the `vivid` module is loaded).
-//!
-//! ## Local dev
-//!
-//! ```bash
-//! sudo modprobe vivid
-//! v4l2-ctl --list-formats-ext -d /dev/video0
-//! cargo test -p video-capture --features vivid-tests
-//! ```
+//! Requires `libclang-dev` at build time.
+
+#![cfg(not(feature = "v4l2"))]
 
 use crate::traits::{VideoCaptureError, VideoResult, VideoSource};
 use async_trait::async_trait;
-use common::Frame;
+use common::{Frame, PixelFormat};
 use tokio::sync::mpsc;
+use tracing::warn;
 
-/// Stub V4L2 source. Phase 1 will implement this.
+/// Stub V4L2 source — returns an error when `start()` is called.
+///
+/// Enable the `v4l2` feature to get a real implementation:
+///   `cargo build --features video-capture/v4l2`
 pub struct V4l2Source {
     pub device: String,
     pub width: u32,
     pub height: u32,
     pub fps: u32,
+    pub format: PixelFormat,
+    pub queue_depth: usize,
 }
 
 impl V4l2Source {
@@ -57,19 +37,68 @@ impl V4l2Source {
             width,
             height,
             fps,
+            format: PixelFormat::Yuyv,
+            queue_depth: 3,
         }
+    }
+
+    pub fn with_format(mut self, format: PixelFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    pub fn from_common(cfg: &common::VideoConfig) -> Self {
+        let format = match cfg.format.as_str() {
+            "nv12" => PixelFormat::Nv12,
+            "yuyv" => PixelFormat::Yuyv,
+            "rgb24" => PixelFormat::Rgb24,
+            "mjpeg" => PixelFormat::Mjpeg,
+            _ => PixelFormat::Yuyv,
+        };
+        Self {
+            device: cfg.device.clone(),
+            width: cfg.width,
+            height: cfg.height,
+            fps: cfg.fps,
+            format,
+            queue_depth: cfg.queue_depth,
+        }
+    }
+
+    /// Probe is not available without the `v4l2` feature.
+    pub fn probe(&self) -> VideoResult<DeviceProbe> {
+        Err(VideoCaptureError::DeviceOpen(
+            "V4L2 support not compiled in — enable the `v4l2` feature".to_string(),
+        ))
+    }
+}
+
+/// Device probe result — only available with `v4l2` feature.
+#[derive(Debug, Clone)]
+pub struct DeviceProbe {
+    pub device_path: String,
+    pub supported_formats: Vec<String>,
+    pub requested_format: PixelFormat,
+    pub requested_width: u32,
+    pub requested_height: u32,
+    pub requested_fps: u32,
+}
+
+impl std::fmt::Display for DeviceProbe {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DeviceProbe (stub)")
     }
 }
 
 #[async_trait]
 impl VideoSource for V4l2Source {
     async fn start(&mut self) -> VideoResult<mpsc::Receiver<Frame>> {
-        tracing::warn!(
+        warn!(
             device = %self.device,
-            "V4l2Source::start not yet implemented (Phase 1) — use SyntheticVideoSource for testing"
+            "V4l2Source::start called but the `v4l2` feature is not enabled — returning error"
         );
         Err(VideoCaptureError::DeviceOpen(format!(
-            "V4l2Source not implemented yet (Phase 1). Device: {}",
+            "V4L2 support not compiled in (enable `v4l2` feature). Device: {}",
             self.device
         )))
     }
@@ -79,18 +108,16 @@ impl VideoSource for V4l2Source {
     }
 
     fn name(&self) -> &str {
-        "V4l2Source (stub — Phase 1)"
+        "V4l2Source (stub — enable `v4l2` feature)"
     }
 }
 
-/// Check if a V4L2 device exists at the given path.
-/// Useful for CI tests that gate on `vivid` availability.
+// === Device discovery utilities (always available) ===
+
 pub fn device_exists(path: &str) -> bool {
     std::path::Path::new(path).exists()
 }
 
-/// List available V4L2 devices by scanning `/dev/video*`.
-/// Returns paths in sorted order.
 pub fn list_v4l2_devices() -> Vec<String> {
     let mut devices = Vec::new();
     for i in 0..64 {
@@ -100,6 +127,22 @@ pub fn list_v4l2_devices() -> Vec<String> {
         }
     }
     devices
+}
+
+pub fn query_formats(device: &str) -> VideoResult<String> {
+    let output = std::process::Command::new("v4l2-ctl")
+        .args(["--device", device, "--list-formats-ext"])
+        .output()
+        .map_err(|e| VideoCaptureError::DeviceOpen(format!("v4l2-ctl: {e}")))?;
+
+    if !output.status.success() {
+        return Err(VideoCaptureError::DeviceConfig(format!(
+            "v4l2-ctl failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 #[cfg(test)]
@@ -113,13 +156,11 @@ mod tests {
 
     #[test]
     fn device_exists_returns_true_for_dev_null() {
-        // /dev/null always exists on Linux
         assert!(device_exists("/dev/null"));
     }
 
     #[test]
     fn list_v4l2_devices_does_not_panic() {
-        // Just verify it doesn't crash — actual devices depend on environment
         let _devices = list_v4l2_devices();
     }
 
@@ -131,54 +172,33 @@ mod tests {
         assert_eq!(src.fps, 30);
     }
 
-    /// This test is `#[ignore]` by default — it requires the `vivid` kernel
-    /// module to be loaded. Run with:
-    ///   sudo modprobe vivid
-    ///   cargo test -p video-capture -- --include-ignored vivid
     #[test]
-    #[ignore = "requires vivid kernel module: sudo modprobe vivid"]
-    fn vivid_module_is_loaded_and_creates_devices() {
-        let devices = list_v4l2_devices();
-        assert!(
-            !devices.is_empty(),
-            "expected at least one /dev/video* device after `modprobe vivid`"
-        );
-        println!("Found V4L2 devices: {devices:?}");
-        // Verify at least one is readable
-        let first = &devices[0];
-        assert!(
-            device_exists(first),
-            "device {first} should exist (listed but not found?)"
-        );
+    fn probe_returns_error_without_feature() {
+        let src = V4l2Source::new("/dev/video0", 640, 480, 30);
+        let result = src.probe();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("v4l2"));
     }
 
-    /// This test checks that `vivid` produces a recognizable test pattern.
-    /// Requires `v4l2-ctl` and the `vivid` module.
+    #[tokio::test]
+    async fn start_returns_error_without_feature() {
+        let mut src = V4l2Source::new("/dev/video0", 640, 480, 30);
+        let result = src.start().await;
+        assert!(result.is_err());
+    }
+
+    /// Vivid-gated test — only meaningful with v4l2 feature, but kept here
+    /// for discovery logic.
     #[test]
-    #[ignore = "requires vivid + v4l2-ctl"]
-    fn vivid_device_supports_querying_formats() {
+    #[ignore = "requires vivid kernel module: sudo modprobe vivid"]
+    fn vivid_devices_detected() {
         let devices = list_v4l2_devices();
         if devices.is_empty() {
-            eprintln!("SKIP: no V4L2 devices — run `sudo modprobe vivid`");
+            eprintln!("SKIP: no V4L2 devices (run `sudo modprobe vivid`)");
             return;
         }
-        let dev = &devices[0];
-        let output = std::process::Command::new("v4l2-ctl")
-            .args(["--device", dev, "--list-formats-ext"])
-            .output();
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                println!("v4l2-ctl output for {dev}:\n{stdout}");
-                // vivid should report at least one format
-                assert!(
-                    stdout.contains("YU") || stdout.contains("RGB") || stdout.contains("MJPEG"),
-                    "expected at least one pixel format from vivid"
-                );
-            }
-            Err(e) => {
-                eprintln!("SKIP: v4l2-ctl not available: {e}");
-            }
-        }
+        println!("Found V4L2 devices: {devices:?}");
+        assert!(!devices.is_empty());
     }
 }

@@ -68,6 +68,7 @@ commander = { path = "crates/commander", version = "0.1.0" }
 proptest = "1.4"
 tokio-test = "0.4"
 mockall = "0.12"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [profile.dev]
 opt-level = 1  # Slight optimization for dev — needed for image processing to be tolerable
