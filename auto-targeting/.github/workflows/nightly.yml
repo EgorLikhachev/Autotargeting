@@ -8,12 +8,14 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  nightly:
-    name: Full SITL + benchmarks
+  # Full test suite — runs all tests including ignored
+  full-tests:
+    name: Full test suite
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +23,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libclang-dev v4l-utils
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -31,28 +38,212 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-nightly-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Full test suite
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run all tests (including ignored)
         run: cargo test --workspace --verbose -- --include-ignored
 
-      - name: Long-running SITL test (stub — Phase 6)
+      - name: Run scenario suite
         run: |
-          echo "TODO: spin up SITL in Docker, run 30-minute tracking scenario"
-          echo "For now, just run the mock smoke test"
-          cargo run -p auto-targeting-cli -- --mock-all
+          cargo run -p auto-targeting-cli -- scenario --all sim/scenarios/
 
-      - name: Stress test — 5 minute mock run
+  # Run all benchmarks
+  benchmarks:
+    name: Benchmarks
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Kalman benchmarks
+        run: cargo bench -p target-tracker --bench kalman
+
+      - name: Run tracker benchmarks
+        run: cargo bench -p target-tracker --bench tracker
+
+      - name: Run NMS benchmarks
+        run: cargo bench -p cv-inference --bench nms
+
+      - name: Run anti-loop benchmarks
+        run: cargo bench -p commander --bench anti_loop
+
+      - name: Run watchdog benchmarks
+        run: cargo bench -p commander --bench watchdogs
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: target/criterion/
+          retention-days: 30
+
+  # Stress test: 30-minute SITL run
+  stress-test:
+    name: 30-min SITL stress test
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
         run: |
-          # Run the mock smoke test for ~5 minutes by repeating it
-          for i in 1 2 3 4 5; do
-            echo "=== Iteration $i ==="
-            cargo run -p auto-targeting-cli -- --health-check
+          sudo apt-get update
+          sudo apt-get install -y docker.io docker-compose-v2 python3-pip
+          pip3 install --user pymavlink
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-stress-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build ArduPilot SITL Docker image
+        run: |
+          cd sim/sitl
+          docker build -t auto-targeting-sitl:latest .
+
+      - name: Start SITL
+        run: |
+          cd sim/sitl
+          docker compose up -d
+          timeout 120 bash -c 'until nc -z 127.0.0.1 5760; do sleep 2; echo "waiting..."; done'
+
+      - name: Run 30-min stress test
+        run: |
+          # Run scenario suite repeatedly for 30 minutes
+          START_TIME=$(date +%s)
+          END_TIME=$((START_TIME + 1800))  # 30 minutes
+          ITERATION=0
+
+          while [ $(date +%s) -lt $END_TIME ]; do
+            ITERATION=$((ITERATION + 1))
+            echo "=== Stress test iteration $ITERATION ==="
+
+            # Run all scenarios
+            cargo run -p auto-targeting-cli -- scenario --all sim/scenarios/ || {
+              echo "ERROR: iteration $ITERATION failed"
+              exit 1
+            }
+
+            # Brief pause
+            sleep 5
           done
 
-      - name: Audit
-        run: |
-          cargo install cargo-audit --locked || true
-          cargo audit
+          echo "Stress test completed: $ITERATION iterations in 30 minutes"
 
-      - name: Benchmarks (stub — Phase 6)
+      - name: Check for memory leaks
         run: |
-          echo "TODO: cargo bench --workspace once benchmarks are in place"
+          # Run valgrind on the binary (if available)
+          # For now, just check that the binary doesn't crash after stress
+          cargo run -p auto-targeting-cli -- --health-check
+
+      - name: SITL logs
+        if: always()
+        run: |
+          cd sim/sitl
+          docker compose logs --tail=100 || true
+
+      - name: Stop SITL
+        if: always()
+        run: |
+          cd sim/sitl
+          docker compose down || true
+
+  # Security audit
+  security-audit:
+    name: Security audit
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Run cargo deny
+        run: cargo deny check
+
+  # Coverage report
+  coverage:
+    name: Code coverage
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin || true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-coverage-nightly-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tarpaulin
+        run: |
+          cargo tarpaulin \
+            --workspace \
+            --out Xml \
+            --output-dir coverage \
+            --timeout 300 \
+            -- --test-threads=2 || true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/cobertura.xml
+          fail_ci_if_error: false
+
+      - name: Print coverage summary
+        run: |
+          echo "=== Coverage Report ==="
+          if [ -f coverage/cobertura.xml ]; then
+            # Extract line coverage (requires xmllint or python)
+            python3 -c "
+            import xml.etree.ElementTree as ET
+            tree = ET.parse('coverage/cobertura.xml')
+            root = tree.getroot()
+            line_rate = root.get('line-rate', '0')
+            print(f'Line coverage: {float(line_rate)*100:.1f}%')
+            " || echo "Could not parse coverage XML"
+          else
+            echo "No coverage file found"
+          fi

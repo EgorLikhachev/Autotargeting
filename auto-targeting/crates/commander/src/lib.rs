@@ -7,14 +7,21 @@
 
 pub mod anti_loop;
 pub mod commander;
+pub mod health;
 pub mod pid;
+pub mod safety;
 pub mod state_machine;
 pub mod transform;
 pub mod watchdogs;
 
 pub use anti_loop::{AntiLoopGuard, CorrectionCommand, GuardDecision};
 pub use commander::{Commander, CommanderError, CommanderHealth, CommanderResult};
+pub use health::{HealthConfig, HealthServer, HealthStatus};
 pub use pid::{PidConfig, PidController, PidPair};
+pub use safety::{
+    BatteryConfig, BatteryMonitor, BatteryState, BatteryViolation, Geofence, GeofenceConfig,
+    GeofenceViolation, SafetyAction, SafetyConfig, SafetyMonitor, SafetyViolation,
+};
 pub use state_machine::{StateMachine, StateTransitionError};
 pub use transform::{CameraParams, CameraToAngular, FrameOffset, NedTarget};
 pub use watchdogs::{
