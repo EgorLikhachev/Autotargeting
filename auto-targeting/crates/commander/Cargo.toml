@@ -22,6 +22,7 @@ axum = { workspace = true }
 tower = { workspace = true }
 sd-notify = { workspace = true }
 anyhow = { workspace = true }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
@@ -29,6 +30,7 @@ criterion = { workspace = true }
 common = { workspace = true }
 fc-adapter = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }
+tempfile = "3.10"
 
 [[bench]]
 name = "anti_loop"

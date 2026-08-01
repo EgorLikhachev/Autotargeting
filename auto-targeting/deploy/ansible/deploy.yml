@@ -1,0 +1,166 @@
+# Deploy — обновление бинарника и конфига на Orange Pi 5.
+#
+# Запускается при каждом релизе:
+#   ansible-playbook -i inventory.yml deploy.yml
+#
+# С роллбэком:
+#   ansible-playbook -i inventory.yml deploy.yml -e "rollback=true"
+#
+# С конкретной версией:
+#   ansible-playbook -i inventory.yml deploy.yml -e "version=v1.2.3"
+
+---
+- name: Deploy auto-targeting to Orange Pi 5
+  hosts: orangepi5
+  become: yes
+  vars:
+    target_user: autotarget
+    install_dir: /opt/auto-targeting
+    config_dir: /etc/auto-targeting
+    log_dir: /var/log/auto-targeting
+    rollback: false
+    # Локальный путь к собранному бинарнику (aarch64)
+    local_binary: "{{ playbook_dir }}/../../../target/aarch64-unknown-linux-gnu/release/auto-targeting"
+    # Локальный путь к rknn-bridge
+    local_bridge: "{{ playbook_dir }}/../../../rknn-bridge/build/rknn-bridge"
+
+  pre_tasks:
+    - name: Check if local binary exists
+      stat:
+        path: "{{ local_binary }}"
+      delegate_to: localhost
+      register: local_bin_stat
+      failed_when: not local_bin_stat.stat.exists
+
+    - name: Check if rollback requested
+      debug:
+        msg: "ROLLBACK MODE — restoring previous version"
+      when: rollback | bool
+
+  tasks:
+    - name: Stop services before deploy
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service
+      ignore_errors: yes
+
+    - name: Backup current binaries (for rollback)
+      copy:
+        src: "{{ install_dir }}/bin/{{ item }}"
+        dest: "{{ install_dir }}/previous/{{ item }}"
+        remote_src: yes
+        force: yes
+      loop:
+        - auto-targeting
+        - rknn-bridge
+      ignore_errors: yes
+      when: not rollback | bool
+
+    - name: Restore previous binaries (rollback)
+      copy:
+        src: "{{ install_dir }}/previous/{{ item }}"
+        dest: "{{ install_dir }}/bin/{{ item }}"
+        remote_src: yes
+        force: yes
+      loop:
+        - auto-targeting
+        - rknn-bridge
+      when: rollback | bool
+
+    - name: Upload new auto-targeting binary
+      copy:
+        src: "{{ local_binary }}"
+        dest: "{{ install_dir }}/bin/auto-targeting"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: "0755"
+      when: not rollback | bool
+
+    - name: Upload new rknn-bridge binary (if exists)
+      copy:
+        src: "{{ local_bridge }}"
+        dest: "{{ install_dir }}/bin/rknn-bridge"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: "0755"
+      when: not rollback | bool
+      ignore_errors: yes
+
+    - name: Upload config file
+      copy:
+        src: "{{ playbook_dir }}/../../../config.example.toml"
+        dest: "{{ config_dir }}/config.toml"
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: "0644"
+        backup: yes
+      when: not rollback | bool
+      notify: Restart services
+
+    - name: Create log directory
+      file:
+        path: "{{ log_dir }}"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_user }}"
+        mode: "0755"
+
+    - name: Start services
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service
+
+    - name: Wait for health endpoint
+      uri:
+        url: "http://{{ ansible_host }}:8080/health"
+        method: GET
+        return_content: yes
+      register: health_result
+      until: health_result.status == 200
+      retries: 5
+      delay: 2
+      ignore_errors: yes
+
+    - name: Show health status
+      debug:
+        msg: "{{ health_result.json | default('health check failed') }}"
+
+    - name: Rollback on health check failure
+      debug:
+        msg: "Health check failed! Consider running with rollback=true"
+      when: health_result.status != 200
+
+    - name: Show service status
+      command: systemctl status {{ item }} --no-pager
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service
+      register: service_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Show recent logs
+      command: journalctl -u auto-targeting.service --no-pager -n 20
+      register: recent_logs
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display logs
+      debug:
+        var: recent_logs.stdout_lines
+
+  handlers:
+    - name: Restart services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service

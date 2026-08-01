@@ -36,3 +36,10 @@ rustyline = "14.0"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+chrono = { workspace = true }
+target-tracker = { workspace = true }
+video-capture = { workspace = true }
+common = { workspace = true }
+fc-adapter = { workspace = true }
+commander = { workspace = true }
+proptest = { workspace = true }

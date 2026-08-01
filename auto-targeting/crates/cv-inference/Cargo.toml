@@ -22,6 +22,7 @@ tokio-test = { workspace = true }
 chrono = { workspace = true }
 criterion = { workspace = true }
 common = { workspace = true }
+proptest = { workspace = true }
 
 [[bench]]
 name = "nms"

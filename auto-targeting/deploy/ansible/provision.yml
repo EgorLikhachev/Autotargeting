@@ -1,0 +1,128 @@
+# Provisioning — настройка Orange Pi 5 с нуля.
+#
+# Запускается ОДИН раз перед первым деплоем:
+#   ansible-playbook -i inventory.yml provision.yml
+#
+# Что делает:
+# 1. Устанавливает системные пакеты (build-essential, cmake, libclang-dev, v4l-utils)
+# 2. Создаёт пользователя `autotarget`
+# 3. Создаёт директории (/opt/auto-targeting, /var/log/auto-targeting)
+# 4. Копирует librknnrt.so (если есть)
+# 5. Устанавливает systemd unit files
+
+---
+- name: Provision Orange Pi 5 for auto-targeting
+  hosts: orangepi5
+  become: yes
+  vars:
+    target_user: autotarget
+    target_group: autotarget
+    install_dir: /opt/auto-targeting
+    log_dir: /var/log/auto-targeting
+    config_dir: /etc/auto-targeting
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install system dependencies
+      apt:
+        name:
+          - build-essential
+          - cmake
+          - libclang-dev
+          - v4l-utils
+          - curl
+          - git
+          - ffmpeg
+          - usbutils
+        state: present
+
+    - name: Install Rust (stable)
+      shell: |
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+      args:
+        creates: /home/{{ target_user }}/.cargo/bin/cargo
+
+    - name: Create autotarget user
+      user:
+        name: "{{ target_user }}"
+        group: "{{ target_group }}"
+        shell: /bin/bash
+        groups: video,dialout
+        append: yes
+        create_home: yes
+
+    - name: Create install directory
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ target_user }}"
+        group: "{{ target_group }}"
+        mode: "0755"
+      loop:
+        - "{{ install_dir }}"
+        - "{{ install_dir }}/bin"
+        - "{{ install_dir }}/models"
+        - "{{ install_dir }}/previous"
+        - "{{ log_dir }}"
+        - "{{ config_dir }}"
+
+    - name: Copy systemd unit files
+      copy:
+        src: ../systemd/{{ item }}
+        dest: /etc/systemd/system/{{ item }}
+        mode: "0644"
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service
+      notify: Reload systemd
+
+    - name: Enable services (but don't start yet)
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        daemon_reload: yes
+      loop:
+        - auto-targeting.service
+        - rknn-bridge.service
+
+    - name: Check for librknnrt.so
+      stat:
+        path: "{{ install_dir }}/librknnrt.so"
+      register: rknn_lib
+
+    - name: Note about RKNN library
+      debug:
+        msg: >
+          RKNN library not found at {{ install_dir }}/librknnrt.so.
+          To enable NPU inference, copy it manually:
+          scp librknnrt.so {{ ansible_user }}@{{ ansible_host }}:{{ install_dir }}/
+      when: not rknn_lib.stat.exists
+
+    - name: Check USB devices
+      command: lsusb
+      register: usb_devices
+      changed_when: false
+
+    - name: Show USB devices (for camera/FC verification)
+      debug:
+        var: usb_devices.stdout_lines
+
+    - name: Check V4L2 devices
+      command: ls -la /dev/video*
+      register: v4l2_devices
+      changed_when: false
+      failed_when: false
+
+    - name: Show V4L2 devices
+      debug:
+        var: v4l2_devices.stdout_lines
+      when: v4l2_devices.stdout_lines is defined
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes

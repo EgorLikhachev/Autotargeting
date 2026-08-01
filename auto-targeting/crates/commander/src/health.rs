@@ -221,11 +221,53 @@ async fn health_handler(
 }
 
 async fn metrics_handler() -> impl IntoResponse {
-    // Prometheus-совместимый формат (Phase 3: реальные метрики)
-    "# HELP auto_targeting_uptime_seconds Uptime in seconds\n\
-     # TYPE auto_targeting_uptime_seconds counter\n\
-     auto_targeting_uptime_seconds 0\n"
-        .to_string()
+    // Prometheus-совместимый формат
+    // В реальном использовании здесь будут реальные метрики из HealthStatus
+    let metrics = r#"# HELP auto_targeting_uptime_seconds Uptime in seconds
+# TYPE auto_targeting_uptime_seconds counter
+auto_targeting_uptime_seconds 0
+
+# HELP auto_targeting_state_current Current system state (0=IDLE, 1=ARMED, 2=SCANNING, etc.)
+# TYPE auto_targeting_state_current gauge
+auto_targeting_state_current 0
+
+# HELP auto_targeting_fc_connected FC connection status (0=disconnected, 1=connected)
+# TYPE auto_targeting_fc_connected gauge
+auto_targeting_fc_connected 0
+
+# HELP auto_targeting_fc_armed FC armed status (0=disarmed, 1=armed)
+# TYPE auto_targeting_fc_armed gauge
+auto_targeting_fc_armed 0
+
+# HELP auto_targeting_fc_heartbeat_stale FC heartbeat stale status (0=fresh, 1=stale)
+# TYPE auto_targeting_fc_heartbeat_stale gauge
+auto_targeting_fc_heartbeat_stale 1
+
+# HELP auto_targeting_watchdogs_expired Number of expired watchdogs
+# TYPE auto_targeting_watchdogs_expired gauge
+auto_targeting_watchdogs_expired 0
+
+# HELP auto_targeting_watchdogs_total Total number of registered watchdogs
+# TYPE auto_targeting_watchdogs_total gauge
+auto_targeting_watchdogs_total 5
+
+# HELP auto_targeting_rate_limiter_sent_total Total commands sent to FC
+# TYPE auto_targeting_rate_limiter_sent_total counter
+auto_targeting_rate_limiter_sent_total 0
+
+# HELP auto_targeting_rate_limiter_dropped_total Total commands dropped by rate limiter
+# TYPE auto_targeting_rate_limiter_dropped_total counter
+auto_targeting_rate_limiter_dropped_total 0
+
+# HELP auto_targeting_active_target Active target ID (0 = no target)
+# TYPE auto_targeting_active_target gauge
+auto_targeting_active_target 0
+
+# HELP auto_targeting_last_command_age_ms Age of last FC command in milliseconds
+# TYPE auto_targeting_last_command_age_ms gauge
+auto_targeting_last_command_age_ms 0
+"#;
+    metrics.to_string()
 }
 
 async fn root_handler() -> impl IntoResponse {
