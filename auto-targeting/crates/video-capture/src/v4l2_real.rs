@@ -14,6 +14,10 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
+use v4l::buffer::Type;
+use v4l::io::mmap::Stream as MMapStream;
+use v4l::io::Stream as StreamTrait;
+use v4l::video::Capture;
 
 /// V4L2 video source — opens a real or vivid device.
 pub struct V4l2Source {
@@ -214,11 +218,12 @@ fn run_capture_loop(
         "V4L2 format negotiated"
     );
 
-    let buffer_type = v4l::buffer::Type::VideoCapture;
-    let mut buffers = v4l::io::mmap::MMapStream::new(&mut device, buffer_type)
+    let buffer_type = Type::VideoCapture;
+    let mut buffers = MMapStream::new(&mut device, buffer_type)
         .map_err(|e| VideoCaptureError::DeviceConfig(format!("MMapStream::new: {e}")))?;
 
-    v4l::io::Stream::start(&mut buffers)
+    buffers
+        .start()
         .map_err(|e| VideoCaptureError::DeviceConfig(format!("stream start: {e}")))?;
 
     info!("V4L2 streaming started");
@@ -265,7 +270,7 @@ fn run_capture_loop(
         seq += 1;
     }
 
-    let _ = v4l::io::Stream::stop(&mut buffers);
+    let _ = buffers.stop();
     info!(
         frames_captured = seq,
         uptime_secs = capture_start.elapsed().as_secs_f64(),
@@ -285,8 +290,9 @@ fn pixel_format_to_fourcc(fmt: PixelFormat) -> v4l::format::FourCC {
 }
 
 fn fourcc_to_string(fourcc: v4l::format::FourCC) -> String {
-    let bytes = fourcc.0;
-    String::from_utf8_lossy(&bytes).trim_end_matches('\0').to_string()
+    String::from_utf8_lossy(&fourcc.repr)
+        .trim_end_matches('\0')
+        .to_string()
 }
 
 pub fn device_exists(path: &str) -> bool {
