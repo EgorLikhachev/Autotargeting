@@ -16,7 +16,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
 use v4l::buffer::Type;
 use v4l::io::mmap::Stream as MMapStream;
-use v4l::io::Stream as StreamTrait;
+use v4l::io::traits::CaptureStream;
+use v4l::io::traits::Stream as StreamTrait;
 use v4l::video::Capture;
 
 /// V4L2 video source — opens a real or vivid device.
