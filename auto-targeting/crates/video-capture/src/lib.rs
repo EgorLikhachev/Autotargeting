@@ -19,7 +19,11 @@ pub mod convert;
 pub mod replay;
 pub mod synthetic;
 pub mod traits;
+
+#[cfg(not(feature = "v4l2"))]
 pub mod v4l2_stub;
+#[cfg(feature = "v4l2")]
+pub mod v4l2_real;
 
 pub use convert::{
     convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, rgb24_to_nv12, yuyv_to_nv12,
@@ -28,7 +32,11 @@ pub use convert::{
 pub use replay::ReplaySource;
 pub use synthetic::{SyntheticConfig, SyntheticPattern, SyntheticVideoSource};
 pub use traits::{VideoCaptureError, VideoSource};
-pub use v4l2_stub::V4l2Source;
+
+#[cfg(not(feature = "v4l2"))]
+pub use v4l2_stub::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
+#[cfg(feature = "v4l2")]
+pub use v4l2_real::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
 
 /// Re-export common frame types for convenience.
 pub use common::{Frame, FrameMetadata, PixelFormat};
