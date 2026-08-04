@@ -1,0 +1,38 @@
+[package]
+name = "cv-visualizer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+description = """\
+Headless annotation + frame saver for Phase 1.1. Draws bounding boxes, class \
+labels and confidence onto frames and writes JPEGs (for later ffmpeg muxing) \
+plus a JSONL detection log. Pure Rust (image + imageproc) — no OpenCV, \
+cross-compiles to aarch64.\
+"""
+
+[dependencies]
+common = { workspace = true }
+# image: only jpeg/png encoders/decoders, no default image-format soup.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# imageproc: keep `text` (default) so we can render class/confidence labels.
+# Disable rayon to keep the build deterministic / single-threaded on the
+# resource-constrained target; text rendering needs ab_glyph either way.
+imageproc = { version = "0.27", default-features = false, features = ["text"] }
+# ab_glyph is pulled in transitively by imageproc/text; we depend on it
+# directly to load the embedded TTF font.
+ab_glyph = "0.2"
+tracing = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lib]
+name = "cv_visualizer"
+path = "src/lib.rs"
