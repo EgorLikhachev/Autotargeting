@@ -6,6 +6,7 @@ members = [
     "crates/yolov8",
     "crates/cv-inference",
     "crates/cv-visualizer",
+    "crates/system-telemetry",
     "crates/target-tracker",
     "crates/fc-adapter",
     "crates/commander",
@@ -74,6 +75,7 @@ video-capture = { path = "crates/video-capture", version = "0.1.0" }
 yolov8 = { path = "crates/yolov8", version = "0.1.0" }
 cv-inference = { path = "crates/cv-inference", version = "0.1.0" }
 cv-visualizer = { path = "crates/cv-visualizer", version = "0.1.0" }
+system-telemetry = { path = "crates/system-telemetry", version = "0.1.0" }
 target-tracker = { path = "crates/target-tracker", version = "0.1.0" }
 fc-adapter = { path = "crates/fc-adapter", version = "0.1.0" }
 commander = { path = "crates/commander", version = "0.1.0" }

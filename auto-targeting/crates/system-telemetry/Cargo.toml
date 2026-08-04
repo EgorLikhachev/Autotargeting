@@ -1,0 +1,29 @@
+[package]
+name = "system-telemetry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+description = """\
+Process + thermal telemetry for Phase 1.1 soak tests: VmRSS memory from \
+/proc/self/status, CPU/NPU temperatures from /sys/class/thermal, and an \
+RK3588 NPU-load helper via sysfs. Linux-only (the target platform); on \
+non-Lix the probes return None so callers can still build/run on dev \
+machines.\
+"""
+
+[dependencies]
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lib]
+name = "system_telemetry"
+path = "src/lib.rs"
