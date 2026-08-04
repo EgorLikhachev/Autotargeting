@@ -54,6 +54,46 @@ cargo run -p auto-targeting-cli -- --health-check
 cargo run -p auto-targeting-cli -- --config config.toml
 ```
 
+## Phase 1.1 — minimal CV loop (camera → model → detections)
+
+The Phase 1.1 minimal contour runs the real model end-to-end on x86 (ONNX
+Runtime) and, with hardware, on RK3588 (RKNN). See
+[`docs/POC_PHASE_1_1.md`](docs/POC_PHASE_1_1.md) for the full write-up.
+
+```bash
+# 1) Fetch the baseline COCO YOLOv8n model (one-time, ~13 MB)
+./scripts/download_models.sh
+
+# 2) Single-image inference smoke (closes "запустить готовую модель")
+cargo run -p cv-inference --example onnx_infer --features cpu-onnx -- \
+    models/yolov8n.onnx path/to/image.jpg
+
+# 3) 30-minute continuous soak test of the full loop
+#    (synthetic source → model → annotate → metrics → telemetry)
+./scripts/soak_30min.sh
+#    → output/soak/summary.json   (FPS, p50/p95 latency)
+#    → output/soak/telemetry.jsonl (RSS, CPU/NPU temperature)
+#    → output/soak/frames/...      (annotated JPEGs)
+
+# 4) Mux the annotated frames into a processed demo video
+./scripts/make_video.sh output/soak 15   # → output/soak/processed.mp4
+```
+
+The CPU path requires the `cpu-onnx` feature (ONNX Runtime, auto-downloaded).
+On RK3588, convert the model first:
+
+```bash
+python scripts/convert_rknn.py --onnx models/yolov8n.onnx \
+    --out models/yolov8n_int8.rknn --platform rk3588
+```
+
+New Phase 1.1 crates:
+
+- `yolov8` — backend-agnostic letterbox + output parser (shared by CPU & NPU)
+- `cv-inference` (feature `cpu-onnx`) — real ONNX Runtime backend
+- `cv-visualizer` — headless bbox/label annotation + JPEG/JSONL writer
+- `system-telemetry` — VmRSS, CPU/NPU temperature, FPS/latency recorder
+
 ## REPL commands
 
 ```

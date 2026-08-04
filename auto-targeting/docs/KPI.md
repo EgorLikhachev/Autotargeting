@@ -25,6 +25,32 @@
 | FC command rate | 10 Hz (rate-limited) | 4 | Unit test | ✅ enforced by `CommandRateLimiter` |
 | Synthetic source FPS | unlimited | 0 | Unit test | ✅ tested at 100–200 FPS |
 
+## Phase 1.1 Soak & Thermal KPIs
+
+Introduced in the Phase 1.1 minimal-loop work (see
+[POC_PHASE_1_1.md](POC_PHASE_1_1.md)). The instrumentation is in place
+(`system-telemetry` + `MetricsRecorder` + the `soak` example); the numeric
+"Current" cells are filled after the first on-device run of
+`scripts/soak_30min.sh`.
+
+| KPI | Target | Where measured | Current |
+|---|---|---|---|
+| Soak run duration | ≥ 30 min | `soak` example | — (instrumented) |
+| Sustained FPS (capture → detection) | ≥ 15 | `summary.json` | — (instrumented) |
+| End-to-end latency p50 (capture → detection) | < 100 ms | `summary.json` | — (instrumented) |
+| End-to-end latency p95 (capture → detection) | < 150 ms | `summary.json` | — (instrumented) |
+| Memory growth over 30 min (VmRSS) | < 50 MB | `telemetry.jsonl` | — (instrumented) |
+| Max CPU package temp over soak | observation | `telemetry.jsonl` | — (instrumented) |
+| Max NPU temp over soak (RK3588) | observation | `telemetry.jsonl` (`npu_temp_c`) | — (instrumented) |
+| NPU load % over soak (RK3588) | observation | `telemetry.jsonl` (`npu_load_percent`) | — (instrumented) |
+| Soak crashes / panics | 0 | run exit code | — (instrumented) |
+
+**Note on temperature:** the original KPI table had no thermal metrics. The
+RKNN SDK does not expose temperature; the canonical source is the kernel
+thermal-zone sysfs (`/sys/class/thermal/thermal_zoneN`), read by
+`system_telemetry::cpu_temp_c` / `npu_temp_c`. NPU load comes from the devfreq
+attribute (`/sys/class/devfreq/fdab0000.npu/load` on RK3588).
+
 ## Performance Benchmarks (criterion)
 
 | Benchmark | Target | Current | Notes |

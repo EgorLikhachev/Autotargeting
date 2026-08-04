@@ -49,6 +49,11 @@ jobs:
       - name: Run tests (without v4l2 feature)
         run: cargo test --workspace --verbose
 
+      # Phase 1.1: real ONNX-backed CPU inference tests (yolov8 + CpuInferenceBackend).
+      # Requires ort to download+link the ONNX Runtime shared lib (works on Linux).
+      - name: Run CPU-ONNX inference tests
+        run: cargo test -p yolov8 -p cv-inference --features cpu-onnx --verbose
+
       - name: Run V4L2 vivid tests (requires vivid kernel module + libclang)
         env:
           VIVID_TESTS: "1"
