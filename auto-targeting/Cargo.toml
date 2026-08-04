@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/common",
     "crates/video-capture",
+    "crates/yolov8",
     "crates/cv-inference",
     "crates/target-tracker",
     "crates/fc-adapter",
@@ -69,6 +70,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 # Internal crates (for cross-crate deps)
 common = { path = "crates/common", version = "0.1.0" }
 video-capture = { path = "crates/video-capture", version = "0.1.0" }
+yolov8 = { path = "crates/yolov8", version = "0.1.0" }
 cv-inference = { path = "crates/cv-inference", version = "0.1.0" }
 target-tracker = { path = "crates/target-tracker", version = "0.1.0" }
 fc-adapter = { path = "crates/fc-adapter", version = "0.1.0" }

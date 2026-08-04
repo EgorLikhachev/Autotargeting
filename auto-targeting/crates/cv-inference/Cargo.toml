@@ -8,6 +8,7 @@ authors.workspace = true
 
 [dependencies]
 common = { workspace = true }
+yolov8 = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -17,12 +18,38 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 
+# ONNX Runtime backend (optional). Enabled by feature `cpu-onnx`.
+# `ort`'s default features include `download-binaries` + `tls-native`, which
+# fetch a prebuilt ONNX Runtime .dll/.so at build time (needed for linking on
+# MSVC and convenient on Linux/aarch64). Keep defaults on.
+# NOTE: ndarray version must match ort's (0.17) so Array4 types line up.
+ort = { version = "2.0.0-rc.13", optional = true }
+ndarray = { version = "0.17", optional = true }
+
+[features]
+default = []
+# Real CPU inference via ONNX Runtime. Off by default to keep the workspace
+# build light for the many crates/tests that only need the mock backend.
+# Enable with: cargo test -p cv-inference --features cpu-onnx
+cpu-onnx = ["dep:ort", "dep:ndarray"]
+# When enabled, cv-inference can use video-capture's PixelFormat conversion
+# helpers (RGB24/NV12 → RGB) for preprocessing.
+preprocessing = []
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 chrono = { workspace = true }
 criterion = { workspace = true }
 common = { workspace = true }
 proptest = { workspace = true }
+
+# Example `onnx_infer` deps. Only the example uses these; the library itself
+# stays dependency-light. `cpu-onnx` must be enabled for the example to build.
+jpeg-decoder = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1.0"
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [[bench]]
 name = "nms"

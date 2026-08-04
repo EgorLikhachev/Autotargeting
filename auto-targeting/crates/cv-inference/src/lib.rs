@@ -16,13 +16,29 @@
 //! allows development on x86 dev machines without an NPU.
 
 pub mod backend;
+// The rknn-bridge client uses Unix domain sockets (`std::os::unix::net`),
+// which only exist on Unix targets. On non-Unix (e.g. Windows dev machines)
+// the module is absent so the crate still compiles for cpu-onnx development.
+#[cfg(unix)]
 pub mod bridge_client;
 pub mod nms;
 
+#[cfg(feature = "cpu-onnx")]
+pub mod cpu_onnx;
+
 pub use backend::{
-    CpuInferenceBackend, InferenceBackend, MockInferenceBackend,
-    RknnBridgeClient as RknnBridgeClientStub,
+    InferenceBackend, MockInferenceBackend, RknnBridgeClient as RknnBridgeClientStub,
 };
+
+// When the `cpu-onnx` feature is ON, the real ONNX-backed `CpuInferenceBackend`
+// (in `cpu_onnx`) shadows the stub defined in `backend`. Otherwise the stub
+// remains so dependents (cli, commander) still compile on minimal builds.
+#[cfg(not(feature = "cpu-onnx"))]
+pub use backend::CpuInferenceBackend;
+#[cfg(feature = "cpu-onnx")]
+pub use cpu_onnx::CpuInferenceBackend;
+
+#[cfg(unix)]
 pub use bridge_client::{RknnBridgeClient, RknnBridgeConfig};
 pub use nms::non_max_suppression;
 
