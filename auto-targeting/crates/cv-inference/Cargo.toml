@@ -43,13 +43,20 @@ criterion = { workspace = true }
 common = { workspace = true }
 proptest = { workspace = true }
 
-# Example `onnx_infer` deps. Only the example uses these; the library itself
-# stays dependency-light. `cpu-onnx` must be enabled for the example to build.
+# Example `onnx_infer` + `soak` deps. Only the examples use these; the library
+# itself stays dependency-light. `cpu-onnx` must be enabled for the examples to
+# build.
 jpeg-decoder = "0.3"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 tokio = { workspace = true }
 tracing = { workspace = true }
+clap = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+video-capture = { workspace = true }
+cv-visualizer = { workspace = true }
+system-telemetry = { workspace = true }
 
 [[bench]]
 name = "nms"

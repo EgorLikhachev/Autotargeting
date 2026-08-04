@@ -116,6 +116,52 @@ jobs:
           path: coverage/
           retention-days: 7
 
+  # Phase 1.1 soak test — runs a short (2 min) smoke of the minimal CV loop
+  # (video → inference → annotate → metrics) on every main push. The full
+  # 30-minute soak is run manually via scripts/soak_30min.sh on hardware.
+  soak-test:
+    name: Soak test (minimal CV loop, 2 min)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: pr-check
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-soak-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Download baseline model
+        run: ./scripts/download_models.sh
+
+      - name: Run 2-minute soak (synthetic source + COCO model)
+        run: |
+          cargo run --release -p cv-inference --example soak --features cpu-onnx -- \
+            --minutes 2 \
+            --model models/yolov8n.onnx \
+            --output output/soak
+
+      - name: Soak summary
+        if: always()
+        run: cat output/soak/summary.json || true
+
+      - name: Upload soak artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: soak-run
+          path: output/soak/
+          retention-days: 7
+
   # SITL integration tests — runs on main pushes
   sitl-tests:
     name: SITL integration tests
