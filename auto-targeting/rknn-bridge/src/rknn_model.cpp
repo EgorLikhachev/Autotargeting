@@ -276,7 +276,8 @@ public:
 
         rknn_output output;
         memset(&output, 0, sizeof(output));
-        output.want_float = 1;  // coerce to float32 regardless of model dtype
+        output.want_float = 0;     // read NATIVE dtype (rknn-toolkit2 2.3.0 segfaults
+                                   // on want_float=1 with int8 models during outputs_get)
         output.is_prealloc = 0;
 
         ret = rknn_outputs_get(ctx_, 0, &output, nullptr);
@@ -285,16 +286,45 @@ public:
             return dets;
         }
 
-        const size_t expected_floats =
+        // Re-query output attrs to learn the native dtype + qnt (scale/zero-point)
+        // so we can dequantize int8 -> float ourselves if needed.
+        rknn_tensor_attr out_attr;
+        memset(&out_attr, 0, sizeof(out_attr));
+        out_attr.index = 0;
+        rknn_query(ctx_, RKNN_QUERY_OUTPUT_ATTR, &out_attr, sizeof(out_attr));
+        std::cerr << "[RknnBackend] out: size=" << output.size
+                  << " type=" << out_attr.type
+                  << " fl=" << out_attr.fmt
+                  << " qnt_type=" << out_attr.qnt_type
+                  << " scale=" << out_attr.scale
+                  << " zp=" << out_attr.zero_point
+                  << " n_dims=" << out_attr.n_dims << "\n";
+
+        const size_t expected_elems =
             static_cast<size_t>(output_rows_) * static_cast<size_t>(output_anchors_);
-        if (output.size < expected_floats * sizeof(float)) {
-            std::cerr << "[RknnBackend] output too small: " << output.size
-                      << " bytes, expected " << expected_floats * sizeof(float) << "\n";
-            rknn_outputs_release(ctx_, 1, &output);
-            return dets;
+
+        // Dequantize to float regardless of native dtype (int8/float32).
+        // RKNN-TENSOR-TYPE: 1=float32, 2=int8 (per rknn_api.h RKNN_TENSOR_TYPE_).
+        std::vector<float> floats;
+        floats.reserve(expected_elems);
+        if (out_attr.type == 1 /*RKNN_TENSOR_FLOAT32*/) {
+            if (output.size < expected_elems * sizeof(float)) {
+                std::cerr << "[RknnBackend] float output too small: " << output.size << "\n";
+                rknn_outputs_release(ctx_, 1, &output);
+                return dets;
+            }
+            const float* p = static_cast<const float*>(output.buf);
+            floats.assign(p, p + expected_elems);
+        } else {
+            // int8 (or other) — dequantize via scale/zero-point.
+            const int8_t* p = static_cast<const int8_t*>(output.buf);
+            const float scale = out_attr.scale;
+            const int32_t zp = out_attr.zero_point;
+            for (size_t i = 0; i < expected_elems; ++i) {
+                floats.push_back((static_cast<float>(p[i]) - zp) * scale);
+            }
         }
 
-        const float* out = static_cast<const float*>(output.buf);
         const uint32_t rows = output_rows_;
         const uint32_t anchors = output_anchors_;
         const uint32_t nc = rows - 4;
@@ -323,6 +353,7 @@ public:
         };
         std::vector<Cand> cands;
         cands.reserve(256);
+        const float* out = floats.data();
         for (uint32_t a = 0; a < anchors; ++a) {
             const float cx = out[0 * anchors + a];
             const float cy = out[1 * anchors + a];
