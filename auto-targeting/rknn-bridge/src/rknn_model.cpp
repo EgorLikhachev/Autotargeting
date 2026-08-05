@@ -297,7 +297,7 @@ public:
                   << " fl=" << out_attr.fmt
                   << " qnt_type=" << out_attr.qnt_type
                   << " scale=" << out_attr.scale
-                  << " zp=" << out_attr.zero_point
+                  << " zp=" << out_attr.zp
                   << " n_dims=" << out_attr.n_dims << "\n";
 
         const size_t expected_elems =
@@ -319,7 +319,7 @@ public:
             // int8 (or other) — dequantize via scale/zero-point.
             const int8_t* p = static_cast<const int8_t*>(output.buf);
             const float scale = out_attr.scale;
-            const int32_t zp = out_attr.zero_point;
+            const int32_t zp = out_attr.zp;
             for (size_t i = 0; i < expected_elems; ++i) {
                 floats.push_back((static_cast<float>(p[i]) - zp) * scale);
             }
