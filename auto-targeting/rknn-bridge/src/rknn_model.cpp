@@ -218,14 +218,20 @@ public:
             return dets;
         }
 
-        // Set input
+        // Set input.
+        //
+        // RKNN SDK 2.x renamed the pixel-layout enum: the old
+        // RKNN_TENSOR_FORMAT_RGB (SDK 1.x) is gone. RGB24 packed bytes are
+        // now described as NHWC layout (N=1 implicit, H=height, W=width,
+        // C=3 channels). The model itself defines the channel order (RGB vs
+        // BGR) at conversion time; here we only declare the memory layout.
         rknn_input input;
         memset(&input, 0, sizeof(input));
         input.index = 0;
         input.type = RKNN_TENSOR_UINT8;
-        input.size = input_width_ * input_height_ * 3;  // RGB24
+        input.size = input_width_ * input_height_ * 3;  // RGB24 packed
         input.buf = const_cast<uint8_t*>(frame_data);
-        input.fmt = RKNN_TENSOR_FORMAT_RGB;
+        input.fmt = RKNN_TENSOR_NHWC;
 
         int ret = rknn_inputs_set(ctx_, 1, &input);
         if (ret < 0) {
