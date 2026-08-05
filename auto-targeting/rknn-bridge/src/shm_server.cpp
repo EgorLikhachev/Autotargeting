@@ -2,6 +2,7 @@
 
 #include "shm_server.h"
 
+#include <arpa/inet.h>  // htonl/ntohl — canonical big-endian length prefix
 #include <cstring>
 #include <iostream>
 #include <sys/socket.h>
@@ -75,12 +76,20 @@ std::string ShmServer::receive_message() {
         }
     }
 
-    // Read 4-byte length prefix
-    uint32_t length = 0;
-    ssize_t n = read(client_fd_, &length, 4);
+    // Read 4-byte length prefix.
+    //
+    // The wire format is CANONICAL BIG-ENDIAN (network byte order) — the Rust
+    // client writes `len.to_be_bytes()` (bridge_client.rs). We previously read
+    // the prefix as native uint32_t, which is little-endian on x86/aarch64 and
+    // therefore incompatible with the Rust side (the bridge would mis-read
+    // every frame length on any little-endian target, i.e. all our hardware).
+    // ntohl() converts the wire big-endian value to host order.
+    uint32_t length_be = 0;
+    ssize_t n = read(client_fd_, &length_be, 4);
     if (n != 4) {
         return "";
     }
+    const uint32_t length = ntohl(length_be);
 
     // Read the message
     std::string message(length, '\0');
@@ -117,9 +126,11 @@ bool ShmServer::send_response(const std::string& json) {
         return false;
     }
 
-    // 4-byte length prefix + JSON
-    uint32_t length = static_cast<uint32_t>(json.size());
-    if (write(client_fd_, &length, 4) != 4) {
+    // 4-byte length prefix (canonical big-endian, matches Rust's to_be_bytes)
+    // + JSON payload.
+    const uint32_t length = static_cast<uint32_t>(json.size());
+    const uint32_t length_be = htonl(length);
+    if (write(client_fd_, &length_be, 4) != 4) {
         return false;
     }
     if (write(client_fd_, json.data(), length) != static_cast<ssize_t>(length)) {
