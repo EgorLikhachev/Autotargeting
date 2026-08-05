@@ -244,14 +244,19 @@ public:
         input.buf = const_cast<uint8_t*>(frame_data);
         input.fmt = RKNN_TENSOR_NHWC;
 
+        std::cerr << "[RknnBackend] before inputs_set: size=" << input.size << "\n";
         int ret = rknn_inputs_set(ctx_, 1, &input);
+        std::cerr << "[RknnBackend] after inputs_set: ret=" << ret << "\n";
         if (ret < 0) {
             std::cerr << "[RknnBackend] rknn_inputs_set failed: " << ret << "\n";
             return dets;
         }
+        std::cerr.flush();
 
         // Run inference
+        std::cerr << "[RknnBackend] before rknn_run\n"; std::cerr.flush();
         ret = rknn_run(ctx_, nullptr);
+        std::cerr << "[RknnBackend] after rknn_run: ret=" << ret << "\n"; std::cerr.flush();
         if (ret < 0) {
             std::cerr << "[RknnBackend] rknn_run failed: " << ret << "\n";
             return dets;
