@@ -156,6 +156,52 @@ bool parse_infer_request(const std::string& json, InferRequest& req) {
     return true;
 }
 
+// === base64 decoder ===
+// Decodes a standard base64 string into raw bytes. Used to extract the inline
+// frame data sent by the Rust client in the `frame_data_b64` JSON field (the
+// SHM/SCM_RIGHTS path is still a TODO — see SDD §15 #2 — so for now frames
+// travel inline as base64). Mirrors the Rust hand-rolled base64 in
+// bridge_client.rs.
+static inline int b64_char_value(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static std::vector<uint8_t> base64_decode(const std::string& s) {
+    std::vector<uint8_t> out;
+    out.reserve((s.size() / 4) * 3);
+    int val = 0, valb = -8;
+    for (char c : s) {
+        if (c == '=' || c == '\n' || c == '\r' || c == ' ') continue;
+        int d = b64_char_value(c);
+        if (d < 0) continue;
+        val = (val << 6) | d;
+        valb += 6;
+        if (valb >= 0) {
+            out.push_back(static_cast<uint8_t>((val >> valb) & 0xFF));
+            valb -= 8;
+        }
+    }
+    return out;
+}
+
+// Extract the `frame_data_b64` string field from the JSON envelope.
+// Hand-rolled substring extraction (consistent with the rest of this file's
+// minimal JSON handling). Returns empty string if absent.
+static std::string extract_frame_data_b64(const std::string& json) {
+    const std::string key = "\"frame_data_b64\":\"";
+    size_t start = json.find(key);
+    if (start == std::string::npos) return "";
+    start += key.size();
+    size_t end = json.find("\"", start);
+    if (end == std::string::npos) return "";
+    return json.substr(start, end - start);
+}
+
 std::string serialize_health_response(const HealthResponse& resp) {
     std::string s;
     s += "{\"type\":\"health_ack\",\"ok\":" + std::string(resp.ok ? "true" : "false");
@@ -235,8 +281,11 @@ int run_bridge(const std::string& socket_path) {
                 continue;
             }
 
-            // TODO: receive frame via shared memory. For now, use an empty frame.
-            std::vector<uint8_t> frame_data;
+            // Decode the inline frame data from the JSON `frame_data_b64` field.
+            // The SHM/SCM_RIGHTS zero-copy path is still TODO (SDD §15 #2); for
+            // now the Rust/Python client sends the RGB24 frame inline as base64.
+            std::string b64 = extract_frame_data_b64(msg);
+            std::vector<uint8_t> frame_data = base64_decode(b64);
 
             auto start = std::chrono::high_resolution_clock::now();
             auto dets = backend->infer(frame_data.data(), frame_data.size(), req.frame_seq);
