@@ -4,9 +4,8 @@
 > **Source of truth:** the code. This document explains the *why*; the code is the *what*.
 
 This document is the developer-facing companion to the high-level Roadmap
-(`../download/AUTO_TARGETING_ROADMAP.md`). It records the architectural
-decisions as they are realized in code, with references to the ADRs and
-hypotheses that justify them.
+(`ROADMAP.md`). It records the architectural decisions as they are realized in
+code, with references to the ADRs and hypotheses that justify them.
 
 ## Module overview
 
