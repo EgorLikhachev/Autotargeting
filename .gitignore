@@ -1,2 +1,13 @@
+# Local AI-assistant scratch dirs — never commit (buffers, tool outputs, dumps)
+upload/
+tool-results/
+download/
+
+# Environment files may contain secrets
+.env
+.env.*
+!.env.example
+
+# Original ignores
 skills/
 node_modules/
