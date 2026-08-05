@@ -174,7 +174,7 @@ rustup target list --installed
 ```bash
 # Клонировать репозиторий
 cd ~
-git clone https://github.com/EgorLikhachev/Autotatgeting.git auto-targeting
+git clone https://github.com/EgorLikhachev/Autotargeting.git auto-targeting
 cd auto-targeting
 
 # Проверить структуру

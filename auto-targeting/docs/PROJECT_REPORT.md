@@ -96,7 +96,7 @@
 | Тестовых файлов | 8 (Rust) + 1 (C++) |
 | Benchmarks | 20 (criterion) |
 | Git коммитов | 12+ |
-| Git репозиторий | https://github.com/EgorLikhachev/Autotatgeting |
+| Git репозиторий | https://github.com/EgorLikhachev/Autotargeting |
 
 ### 3.2 Тесты
 
@@ -318,7 +318,7 @@
 - `docs/HARDWARE_SETUP.md` — настройка Orange Pi 5
 - `docs/ADR/` — архитектурные решения
 
-**Репозиторий:** https://github.com/EgorLikhachev/Autotatgeting
+**Репозиторий:** https://github.com/EgorLikhachev/Autotargeting
 
 ---
 

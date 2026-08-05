@@ -33,8 +33,8 @@
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/EgorLikhachev/Autotatgeting.git
-cd Autotatgeting
+git clone https://github.com/EgorLikhachev/Autotargeting.git
+cd Autotargeting
 
 # Установить Rust (если нет)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -62,8 +62,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 source ~/.cargo/env
 
 # Клонировать и собрать с V4L2
-git clone https://github.com/EgorLikhachev/Autotatgeting.git
-cd Autotatgeting
+git clone https://github.com/EgorLikhachev/Autotargeting.git
+cd Autotargeting
 cargo build --release --features video-capture/v4l2
 ```
 
@@ -537,7 +537,7 @@ scp username@orangepi:/tmp/camera_test.mp4 .
 
 ```bash
 # На Orange Pi 5
-cd Autotatgeting
+cd Autotargeting
 
 # Создать конфиг
 cp config.example.toml config.camera.toml
@@ -640,7 +640,7 @@ mavproxy.py --master=/dev/ttyACM0 --baudrate=115200
 
 ```bash
 # На Orange Pi 5
-cd Autotatgeting
+cd Autotargeting
 
 # Конфиг
 cp config.example.toml config.fc.toml
@@ -714,7 +714,7 @@ mavproxy.py --master=/dev/ttyACM0 --baudrate=115200
 
 ```bash
 # На Orange Pi 5
-cd Autotatgeting/rknn-bridge
+cd Autotargeting/rknn-bridge
 
 # Без RKNN SDK (stub backend — возвращает fake detections)
 mkdir build && cd build
@@ -782,7 +782,7 @@ nc -U /tmp/rknn-bridge.sock
 git clone https://github.com/airockchip/rknn-toolkit2 /opt/rknn-toolkit2
 
 # Собрать с RKNN
-cd Autotatgeting/rknn-bridge
+cd Autotargeting/rknn-bridge
 rm -rf build && mkdir build && cd build
 cmake -DRKNN_SDK_PATH=/opt/rknn-toolkit2 ..
 make
@@ -870,11 +870,11 @@ log_filter = "info,auto_targeting=debug"
 
 ```bash
 # Терминал 1: запустить rknn-bridge
-cd Autotatgeting/rknn-bridge/build
+cd Autotargeting/rknn-bridge/build
 ./rknn-bridge --socket /tmp/rknn-bridge.sock --model /opt/auto-targeting/models/yolov8n_int8.rknn
 
 # Терминал 2: запустить auto-targeting
-cd Autotatgeting
+cd Autotargeting
 cargo run --release --features video-capture/v4l2 -- \
   --config config.full.toml -- --repl
 ```
@@ -1028,11 +1028,11 @@ scp target/aarch64-unknown-linux-gnu/release/auto-targeting \
   username@192.168.1.100:/home/username/
 
 # Скопировать всю папку
-scp -r Autotatgeting username@192.168.1.100:/home/username/
+scp -r Autotargeting username@192.168.1.100:/home/username/
 
 # Синхронизация (быстрее для повторных передач)
 rsync -avz --exclude target/ --exclude .git/ \
-  ./ username@192.168.1.100:/home/username/Autotatgeting/
+  ./ username@192.168.1.100:/home/username/Autotargeting/
 ```
 
 ### Удалённая разработка (VS Code)
@@ -1040,18 +1040,18 @@ rsync -avz --exclude target/ --exclude .git/ \
 ```bash
 # Установить VS Code + extension "Remote - SSH"
 # F1 → "Remote-SSH: Connect to Host" → username@192.168.1.100
-# Открыть папку Autotatgeting
+# Открыть папку Autotargeting
 ```
 
 ### Удалённый запуск тестов
 
 ```bash
 # Запустить тесты на Orange Pi через SSH
-ssh username@192.168.1.100 "cd Autotatgeting && cargo test --workspace 2>&1" | \
+ssh username@192.168.1.100 "cd Autotargeting && cargo test --workspace 2>&1" | \
   tee /tmp/remote_test_results.log
 
 # Запустить REPL на Orange Pi (интерактивно)
-ssh -t username@192.168.1.100 "cd Autotatgeting && cargo run -- --repl"
+ssh -t username@192.168.1.100 "cd Autotargeting && cargo run -- --repl"
 ```
 
 ### Мониторинг в реальном времени
@@ -1062,11 +1062,11 @@ ssh username@192.168.1.100
 tmux new -s auto-targeting
 
 # В tmux: запустить bridge
-cd Autotatgeting/rknn-bridge/build && ./rknn-bridge
+cd Autotargeting/rknn-bridge/build && ./rknn-bridge
 
 # Ctrl+B, C — новое окно
 # Запустить auto-targeting
-cd Autotatgeting && cargo run --release -- --repl
+cd Autotargeting && cargo run --release -- --repl
 
 # Ctrl+B, D — отключиться (процессы продолжают работать)
 # Переподключиться: tmux attach -t auto-targeting

@@ -3,10 +3,10 @@
 #
 # Запускать НА Orange Pi 5 (через SSH):
 #   ssh orangepi@192.168.1.XXX
-#   curl -sSL https://raw.githubusercontent.com/EgorLikhachev/Autotatgeting/main/scripts/setup_orange_pi.sh | bash -
+#   curl -sSL https://raw.githubusercontent.com/EgorLikhachev/Autotargeting/main/scripts/setup_orange_pi.sh | bash -
 #
 # Или скачать и запустить:
-#   wget https://raw.githubusercontent.com/EgorLikhachev/Autotatgeting/main/scripts/setup_orange_pi.sh
+#   wget https://raw.githubusercontent.com/EgorLikhachev/Autotargeting/main/scripts/setup_orange_pi.sh
 #   chmod +x setup_orange_pi.sh
 #   ./setup_orange_pi.sh
 
@@ -104,7 +104,7 @@ fi
 if [[ ! -d ~/auto-targeting ]]; then
     log_info "Cloning auto-targeting repository..."
     cd ~
-    git clone https://github.com/EgorLikhachev/Autotatgeting.git auto-targeting
+    git clone https://github.com/EgorLikhachev/Autotargeting.git auto-targeting
     log_ok "Repository cloned"
 else
     log_ok "Repository already exists at ~/auto-targeting"
