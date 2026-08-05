@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Auto-Targeting SDD progress tracker",
+  "description": "Living record of completed stages in the SDD workflow (see SDD-SPEC.md §12). Append-only — never edit a completed entry; add a new one to supersede. The anti-loop policy (§12) requires that if the gap between the current state and the expected state does not shrink for 3 consecutive steps on a branch, the agent MUST stop and switch to an alternative approach or escalate.",
+  "version": 1,
+  "last_updated": "2026-08-05",
+  "workflow_steps": [
+    {
+      "step": 1,
+      "name": "Быстрый рекогносцировочный обзор",
+      "status": "completed",
+      "completed_at": "2026-08-04",
+      "result": "Rust workspace edition 2021, MSRV 1.75; 10 crates + C++ rknn-bridge; слоистая HAL-архитектура; target RK3588/Linux."
+    },
+    {
+      "step": 2,
+      "name": "Сбор артефактов истины",
+      "status": "completed",
+      "completed_at": "2026-08-04",
+      "result": "Контракты извлечены: trait VideoSource/InferenceBackend/FlightControllerAdapter, config.example.toml, protocol.h. Сводный реестр API — в SDD-SPEC §5."
+    },
+    {
+      "step": 3,
+      "name": "Моделирование данных и бизнес-логики",
+      "status": "completed",
+      "completed_at": "2026-08-04",
+      "result": "Доменные типы из common/types.rs задокументированы с инвариантами; ER-диаграмма — SDD-SPEC §4."
+    },
+    {
+      "step": 4,
+      "name": "Анализ алгоритмов и производительности",
+      "status": "completed",
+      "completed_at": "2026-08-04",
+      "result": "O-сложности вычислены для yolov8/Kalman/Hungarian/NMS/FSM/anti-loop. Раздел 'Критические алгоритмы' — SDD-SPEC §9."
+    },
+    {
+      "step": 5,
+      "name": "Формирование SDD-SPEC.md",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "docs/SDD-SPEC.md создан, 15 разделов."
+    },
+    {
+      "step": 6,
+      "name": "Валидация спецификации",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "Сверка против кода пройдена; расхождения зафиксированы в §15 'Известные расхождения и TODO'. endianness-баг исправлен (commit)."
+    },
+    {
+      "step": 7,
+      "name": "Подготовка к SDD-будущему",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "Раздел 'Как использовать эту спецификацию' — SDD-SPEC §14; формат change-request определён."
+    }
+  ],
+  "cleanup_steps": [
+    {
+      "step": "C1",
+      "name": "Очистка git от служебных AI-директорий",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "Удалены upload/, tool-results/, download/README.md, .env (8 файлов, ~872KB). .gitignore дополнен."
+    },
+    {
+      "step": "C2",
+      "name": "Перенос ROADMAP в docs/",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "download/AUTO_TARGETING_ROADMAP.md -> docs/ROADMAP.md (git mv). Ссылка в ARCHITECTURE.md поправлена."
+    },
+    {
+      "step": "C3",
+      "name": "Переименование репо Autotatgeting -> Autotargeting",
+      "status": "partial",
+      "completed_at": "2026-08-05",
+      "result": "Локальная часть готова: remote URL + 23 ссылки в docs/Cargo.toml/sh. GitHub-переименование (C3-remote) — за владельцем репо через web-UI (Settings → Rename).",
+      "blocking_on": "C3-remote (manual GitHub rename)"
+    },
+    {
+      "step": "C4",
+      "name": "Фикс endianness length-prefix (C++<->Rust interop)",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "result": "shm_server.cpp: read через ntohl, write через htonl; canonical big-endian. Совместимо с Rust to_be_bytes. На Windows не собирается (нет arpa/inet.h — Linux-only, существующее ограничение)."
+    }
+  ],
+  "anti_loop_events": [],
+  "escalations": []
+}
