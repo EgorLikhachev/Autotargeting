@@ -155,11 +155,22 @@ public:
         }
         fclose(fp);
 
-        // Initialize RKNN
+        // Initialize RKNN. Flags=0 + rknn_init_extension nullptr. We bind to a
+        // single NPU core post-init (mirrors rknn-toolkit2's init_runtime with
+        // core_mask=NPU_CORE_0) — multi-core is not needed for a single stream.
         int ret = rknn_init(&ctx_, model_data.data(), size, 0, nullptr);
         if (ret < 0) {
             error = "rknn_init failed: " + std::to_string(ret);
             return false;
+        }
+
+        // Bind to NPU core 0 (matches rknn-toolkit2 init_runtime default).
+        // Without this the runtime could schedule on AUTO and the subsequent
+        // rknn_outputs_get has been observed to segfault on driver 2.3.0.
+        ret = rknn_set_core_mask(ctx_, RKNN_NPU_CORE_0);
+        if (ret < 0) {
+            std::cerr << "[RknnBackend] rknn_set_core_mask failed: " << ret
+                      << " (continuing with default)\n";
         }
 
         // Query model attributes
