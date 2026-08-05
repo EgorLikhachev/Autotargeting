@@ -87,5 +87,29 @@
     }
   ],
   "anti_loop_events": [],
-  "escalations": []
+  "escalations": [],
+  "hardware_tests": [
+    {
+      "step": "H1",
+      "name": "On-device testing on RK3588 (Orange Pi 5 @ 192.168.0.139)",
+      "status": "completed",
+      "completed_at": "2026-08-05",
+      "device": "Orange Pi 5, RK3588, 8x Cortex-A55, 3.8GB, Debian 12, librknnrt 2.3.0",
+      "results": {
+        "workspace_build_aarch64": "PASS (release)",
+        "unit_tests_aarch64": "PASS 294/294 (lib-only)",
+        "rknn_bridge_have_rknn_1": "PASS (linked to librknnrt.so 2.3.0)",
+        "cpp_nms_tests": "PASS 6/6",
+        "bridge_ipc_protocol": "PASS (517ms init round-trip, endianness-fix verified)",
+        "rknn_init_on_npu": "MODEL-FAIL (-6 invalid model: demo mobilenet_ssd incompatible with driver 2.3.0; software path works, need a model converted with rknn-toolkit2 2.3.x)",
+        "npu_hardware_responsive": "PASS (devfreq + thermal active)",
+        "telemetry_probes": "PASS (7 thermal zones, RSS 5.7MB, NPU load readable)",
+        "cpu_onnx": "BLOCKED (libstdc++ GCC12 vs prebuilt ort GCC13 — env limitation, ONNX is x86-dev only)"
+      },
+      "bugs_found_and_fixed_on_hw": [
+        "RKNN_TENSOR_FORMAT_RGB undeclared in SDK 2.x -> RKNN_TENSOR_NHWC (commit 5576f22, decision D-007)"
+      ],
+      "report": "docs/HARDWARE_TEST_RESULTS.md"
+    }
+  ]
 }

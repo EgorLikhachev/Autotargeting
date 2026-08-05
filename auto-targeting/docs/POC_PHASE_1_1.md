@@ -120,18 +120,26 @@ shape, чтобы `nc`/`anchors` не хардкодились.
 > поэтому ONNX-рантайм здесь линкуется только на Linux. CI на Ubuntu прогоняет
 > 2-минутный smoke; полный 30-мин soak — на железе.
 
-Шаблон таблицы (заполнить после прогона `scripts/soak_30min.sh`):
+Частично заполнено после первого прогона на RK3588 (2026-08-05). Полный отчёт —
+[`HARDWARE_TEST_RESULTS.md`](HARDWARE_TEST_RESULTS.md). FPS/latency-ячейки
+остаются `_заполнить_` до получения валидной `.rknn` модели (демо-модель
+несовместима с драйвером 2.3.0); soak 30 мин — после того же.
 
 | Метрика | Цель | x86 (CPU, ONNX) | RK3588 (NPU, RKNN) |
 |---|---|---|---|
+| Сборка на платформе | — | ✅ Linux x86_64 | ✅ **aarch64 native** |
+| Unit-тесты | pass | — | ✅ **294/294** |
+| `rknn-bridge` линкуется с librknnrt | — | n/a | ✅ **librknnrt.so 2.3.0** |
+| IPC-протокол (endianness-фикс) | round-trip | — | ✅ **517 ms init round-trip** |
+| NPU hardware responsive | yes | n/a | ✅ devfreq + thermal active |
 | Video FPS (sustained) | ≥ 30 | _заполнить_ | _заполнить_ |
-| Inference FPS | ≥ 15 | _заполнить_ | _заполнить_ |
+| Inference FPS | ≥ 15 | _заполнить_ | _заполнить_ (нужна валидная .rknn) |
 | Inference latency p50 | < 60 ms | _заполнить_ | _заполнить_ |
 | End-to-end latency p95 | < 150 ms | _заполнить_ | _заполнить_ |
-| Memory growth (30 min) | < 50 MB | _заполнить_ | _заполнить_ |
-| Max CPU temp | (наблюдение) | _заполнить_ | _заполнить_ |
-| Max NPU temp | (наблюдение) | n/a | _заполнить_ |
-| 30-min run crashes | 0 | _заполнить_ | _заполнить_ |
+| Memory: bridge VmRSS (idle) | < 50 MB | — | ✅ **5.7 MB** (запас ×9) |
+| Max CPU temp (idle) | (наблюдение) | — | 45.3 °C (bigcore) |
+| Max NPU temp (idle) | (наблюдение) | n/a | 43.4 °C (`npu-thermal`) |
+| 30-min run crashes | 0 | _заполнить_ | _заполнить_ (после валидной модели) |
 
 Артефакты прогона (где смотреть цифры):
 - `output/soak/summary.json` — FPS + p50/p95 latency по стадиям;

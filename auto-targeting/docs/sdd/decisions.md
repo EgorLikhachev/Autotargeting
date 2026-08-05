@@ -98,3 +98,47 @@
 - (+) Не смешиваю документирование с конфигурацией окружения.
 - (+) Рекомендации зафиксированы для будущих агентов.
 - (−) MCP пока не подключены. Принято.
+
+---
+
+## D-007 — RKNN SDK 2.x: RKNN_TENSOR_NHWC вместо FORMAT_RGB
+**Дата:** 2026-08-05 · **Статус:** Accepted · **Найден:** на целевом железе (Orange Pi 5, librknnrt 2.3.0)
+
+**Контекст:** При первой сборке `rknn-bridge` с `HAVE_RKNN=1` на реальном NPU
+компиляция упала: `RKNN_TENSOR_FORMAT_RGB was not declared`. Наш код (из
+Phase 1.1/E) использовал имя из **SDK 1.x**. В SDK 2.x enum
+`rknn_tensor_format` переименован: вместо pixel-format-семантики
+(`RGB`/`BGR`/`GRAY`) теперь layout-семантика (`NCHW`/`NHWC`/`NC1HWC2`).
+RGB-vs-BGR channel order теперь фиксируется при конвертации модели, а не в
+`rknn_input.fmt`.
+
+**Решение:** `input.fmt = RKNN_TENSOR_FORMAT_RGB` → `RKNN_TENSOR_NHWC`
+(RGB24 packed bytes = NHWC layout, N=1 implicit). Коммит `5576f22`.
+
+**Последствия:**
+- (+) Bridge компилируется и линкуется с librknnrt 2.3.0.
+- (!) Этот баг **невозможно было обнаружить на x86** — там нет RKNN SDK. Только
+  on-device тестирование выявило его. Подтверждает ценность SDD §15 test-gap
+  (нет C++↔Rust round-trip теста).
+- (!) Если в будущем вернутся к SDK 1.x (старые платы), потребуется `#[cfg]`-стиль
+  ветвление по версии SDK. Сейчас target = 2.x, принято.
+
+---
+
+## D-008 — cpu-onnx не поддерживается на Debian 12 / RK3588
+**Дата:** 2026-08-05 · **Статус:** Accepted (ограничение окружения)
+
+**Контекст:** `cargo test -p cv-inference --features cpu-onnx` на устройстве
+падает на линковке: `undefined reference to __cxa_call_terminate / _M_replace_cold`.
+Prebuilt ONNX Runtime (ort.pyke.io) собран с GCC 13+, требует libstdc++ 13;
+Debian 12 bookworm поставляет libstdc++ 12.x (`GLIBCXX_3.4.30`), нужных символов
+нет; `libstdc++-13-dev` в apt отсутствует.
+
+**Решение:** Принять как средовое ограничение. CPU-ONNX fallback предназначен для
+**x86-разработки** (где libstdc++ 13 доступен), не для RK3588. На RK3588 основным
+путём является NPU/RKNN, для которого ONNX не нужен.
+
+**Последствия:**
+- (+) Не нужно тащить ONNX Runtime в production-сборку на борту.
+- (−) Dev-цикл на самом устройстве ограничен mock/RKNN; для ONNX-экспериментов — x86.
+- (!) Зафиксировано в [HARDWARE_TEST_RESULTS.md §3](../HARDWARE_TEST_RESULTS.md).
