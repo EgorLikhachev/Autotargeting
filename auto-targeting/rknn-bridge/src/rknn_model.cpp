@@ -120,7 +120,11 @@ private:
 class RknnBackend : public InferenceBackend {
 public:
     ~RknnBackend() override {
+        // Release zero-copy tensor memory BEFORE the context is destroyed.
+        // Order matters: rknn_destroy_mem needs a live ctx_.
         if (ctx_ >= 0) {
+            if (output_mem_) rknn_destroy_mem(ctx_, output_mem_);
+            if (input_mem_) rknn_destroy_mem(ctx_, input_mem_);
             rknn_destroy(ctx_);
         }
     }
@@ -181,54 +185,96 @@ public:
             return false;
         }
 
-        // Query the input tensor attrs to log expected format/dtype/shape AND
-        // remember the native input type so infer() can convert the incoming
-        // RGB24 frame to the model's expected dtype (float32 / int8 / uint8).
-        if (io_num.n_input >= 1) {
-            rknn_tensor_attr in_attr;
-            memset(&in_attr, 0, sizeof(in_attr));
-            in_attr.index = 0;
-            rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &in_attr, sizeof(in_attr));
-            input_type_ = in_attr.type;  // 1=float32, 2=int8, 3=int16, ...
-            input_size_native_ = in_attr.size;
-            std::cerr << "[RknnBackend] input: type=" << in_attr.type
-                      << " fmt=" << in_attr.fmt
-                      << " n_dims=" << in_attr.n_dims
-                      << " dims=[" << in_attr.dims[0];
-            for (uint32_t i = 1; i < in_attr.n_dims && i < 16; ++i) {
-                std::cerr << "," << in_attr.dims[i];
-            }
-            std::cerr << "] size=" << in_attr.size << "\n";
+        // Log SDK version — critical for diagnosing header/library mismatches.
+        rknn_sdk_version sdk_ver;
+        memset(&sdk_ver, 0, sizeof(sdk_ver));
+        if (rknn_query(ctx_, RKNN_QUERY_SDK_VERSION, &sdk_ver, sizeof(sdk_ver)) == 0) {
+            std::cerr << "[RknnBackend] SDK api=" << sdk_ver.api_version
+                      << " drv=" << sdk_ver.drv_version << "\n";
         }
 
-        // Query the first output tensor's shape so we can parse YOLOv8 output
-        // without hard-coding the class count / anchor count. The standard
-        // Ultralytics YOLOv8 RKNN export has one output of shape [1, 4+nc, A]
-        // where A = 8400 for 640x640 input (80² + 40² + 20²).
-        if (io_num.n_output >= 1) {
-            rknn_tensor_attr out_attr;
-            memset(&out_attr, 0, sizeof(out_attr));
-            out_attr.index = 0;
-            ret = rknn_query(ctx_, RKNN_QUERY_OUTPUT_ATTR, &out_attr, sizeof(out_attr));
-            if (ret < 0) {
-                error = "rknn_query OUTPUT_ATTR failed: " + std::to_string(ret);
-                return false;
+        // Query the INPUT tensor attrs and store in input_attr_ (used for
+        // zero-copy set_io_mem below and memcpy in infer). We FORCE the input
+        // type to UINT8 + fmt NHWC — the NPU then fuses mean/std normalization
+        // and quantization internally (matches how we feed RGB24 packed bytes).
+        memset(&input_attr_, 0, sizeof(input_attr_));
+        input_attr_.index = 0;
+        ret = rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &input_attr_, sizeof(input_attr_));
+        if (ret < 0) {
+            error = "rknn_query INPUT_ATTR failed: " + std::to_string(ret);
+            return false;
+        }
+        input_attr_.type = RKNN_TENSOR_UINT8;
+        input_attr_.fmt = RKNN_TENSOR_NHWC;
+        std::cerr << "[RknnBackend] input: type=" << input_attr_.type
+                  << " fmt=" << input_attr_.fmt
+                  << " n_dims=" << input_attr_.n_dims
+                  << " dims=[" << input_attr_.dims[0];
+        for (uint32_t i = 1; i < input_attr_.n_dims && i < 16; ++i) {
+            std::cerr << "," << input_attr_.dims[i];
+        }
+        std::cerr << "] size=" << input_attr_.size
+                  << " size_with_stride=" << input_attr_.size_with_stride << "\n";
+
+        // Query the OUTPUT tensor attrs and store in output_attr_.
+        // The standard Ultralytics YOLOv8 RKNN export has one output of shape
+        // [1, 4+nc, A] where A = 8400 for 640x640 input (80² + 40² + 20²).
+        memset(&output_attr_, 0, sizeof(output_attr_));
+        output_attr_.index = 0;
+        ret = rknn_query(ctx_, RKNN_QUERY_OUTPUT_ATTR, &output_attr_, sizeof(output_attr_));
+        if (ret < 0) {
+            error = "rknn_query OUTPUT_ATTR failed: " + std::to_string(ret);
+            return false;
+        }
+        // Detect (4+nc, anchors) from dims regardless of layout (CHW or HWC).
+        if (output_attr_.n_dims == 3) {
+            uint32_t vals[3] = {output_attr_.dims[0], output_attr_.dims[1], output_attr_.dims[2]};
+            std::sort(vals, vals + 3, std::greater<uint32_t>());
+            if (vals[2] == 1 && vals[1] >= 5) {
+                output_rows_ = vals[1];      // 4 + nc
+                output_anchors_ = vals[0];   // A (8400 for 640 input)
             }
-            // YOLOv8 output is [1, 4+nc, A] (n_dims==3, CHW). Some RKNN exports
-            // transpose to [1, A, 4+nc]; we detect both via n_dims / dims.
-            if (out_attr.n_dims == 3) {
-                // dims are stored in either HWC or CHW order depending on fmt;
-                // for the canonical YOLOv8 export fmt=NF (float) CHW: dims = [1, 4+nc, A].
-                // Pick the two non-1 entries as (rows, anchors).
-                uint32_t vals[3] = {out_attr.dims[0], out_attr.dims[1], out_attr.dims[2]};
-                // Sort descending so vals[0] is the largest (anchors, usually 8400),
-                // vals[1] is the row count (4+nc), vals[2] is 1.
-                std::sort(vals, vals + 3, std::greater<uint32_t>());
-                if (vals[2] == 1 && vals[1] >= 5) {
-                    output_rows_ = vals[1];      // 4 + nc
-                    output_anchors_ = vals[0];   // A (8400 for 640 input)
-                }
-            }
+        }
+        // is_quant_ distinguishes int8 models (need int8 dequant) from float16
+        // (we request FLOAT32 output via attr.type, runtime converts).
+        // rknn_tensor_type enum: 0=float32, 1=float16, 2=int8, 3=uint8.
+        is_quant_ = (output_attr_.qnt_type == 1 /*RKNN_TENSOR_QNT_AFFINE_ASYMMETRIC*/
+                     && output_attr_.type == 2  /*RKNN_TENSOR_INT8*/);
+        // FORCE the output type to FLOAT32 — this is the key trick from the
+        // official rknn_create_mem_demo.cpp: by setting attr.type before
+        // rknn_set_io_mem, we ask the runtime to convert native NPU output
+        // (fp16 or int8) into a float32 buffer that we can read directly.
+        output_attr_.type = RKNN_TENSOR_FLOAT32;
+        std::cerr << "[RknnBackend] output: type=" << output_attr_.type
+                  << " n_dims=" << output_attr_.n_dims
+                  << " n_elems=" << output_attr_.n_elems
+                  << " size=" << output_attr_.size
+                  << " is_quant=" << is_quant_ << "\n";
+
+        // === Allocate persistent zero-copy tensor memory (once, reused per frame).
+        // This bypasses rknn_inputs_set / rknn_outputs_get entirely — the NPU
+        // reads input and writes output directly into our buffers, and the
+        // attr.type override above makes it deliver float32 output.
+        input_mem_ = rknn_create_mem(ctx_, input_attr_.size_with_stride);
+        if (!input_mem_) {
+            error = "rknn_create_mem(input) failed";
+            return false;
+        }
+        ret = rknn_set_io_mem(ctx_, input_mem_, &input_attr_);
+        if (ret < 0) {
+            error = "rknn_set_io_mem(input) failed: " + std::to_string(ret);
+            return false;
+        }
+        const uint32_t out_bytes = output_attr_.n_elems * sizeof(float);
+        output_mem_ = rknn_create_mem(ctx_, out_bytes);
+        if (!output_mem_) {
+            error = "rknn_create_mem(output) failed";
+            return false;
+        }
+        ret = rknn_set_io_mem(ctx_, output_mem_, &output_attr_);
+        if (ret < 0) {
+            error = "rknn_set_io_mem(output) failed: " + std::to_string(ret);
+            return false;
         }
 
         loaded_ = true;
@@ -236,7 +282,8 @@ public:
                   << " (input=" << input_width << "x" << input_height
                   << ", inputs=" << io_num.n_input << ", outputs=" << io_num.n_output
                   << ", out_rows=" << output_rows_
-                  << ", out_anchors=" << output_anchors_ << ")\n";
+                  << ", out_anchors=" << output_anchors_
+                  << ", io=zero-copy)\n";
         return true;
     }
 
@@ -245,86 +292,50 @@ public:
                                  uint64_t frame_seq) override {
         (void)frame_size;
         std::vector<Detection> dets;
-        if (!loaded_) {
+        if (!loaded_ || !input_mem_ || !output_mem_) {
             return dets;
         }
 
-        // Set input. Always supply RGB24 packed as UINT8 NHWC — rknn applies
-        // the model's configured mean/std normalization internally (verified:
-        // rknn-toolkit2 inference with NHWC uint8 yields correct detections,
-        // matching the int8/float16 models we produce). The native input dtype
-        // (float32 for float16 models, int8 for int8 models) is handled by rknn.
-        rknn_input input;
-        memset(&input, 0, sizeof(input));
-        input.index = 0;
-        input.type = RKNN_TENSOR_UINT8;
-        input.size = static_cast<size_t>(input_width_) * input_height_ * 3;
-        input.buf = const_cast<uint8_t*>(frame_data);
-        input.fmt = RKNN_TENSOR_NHWC;
-
-        int ret = rknn_inputs_set(ctx_, 1, &input);
-        if (ret < 0) {
-            std::cerr << "[RknnBackend] rknn_inputs_set failed: " << ret << "\n";
-            return dets;
+        // Copy the RGB24 packed frame into the zero-copy input tensor buffer.
+        // input_attr_ was set to UINT8/NHWC at load; size_with_stride accounts
+        // for NPU row alignment. For a 640x640x3 input the stride usually
+        // equals the row width (no padding), so a single memcpy works; we still
+        // honour w_stride to be safe on other resolutions.
+        const uint32_t row_bytes = input_width_ * 3;
+        const uint32_t w_stride = input_attr_.w_stride > 0 ? input_attr_.w_stride : row_bytes;
+        uint8_t* dst = static_cast<uint8_t*>(input_mem_->virt_addr);
+        if (w_stride == row_bytes) {
+            memcpy(dst, frame_data, static_cast<size_t>(row_bytes) * input_height_);
+        } else {
+            for (uint32_t y = 0; y < input_height_; ++y) {
+                memcpy(dst + static_cast<size_t>(y) * w_stride,
+                       frame_data + static_cast<size_t>(y) * row_bytes,
+                       row_bytes);
+            }
         }
 
-        // Run inference
-        ret = rknn_run(ctx_, nullptr);
+        // Run inference. NPU writes output directly into output_mem_->virt_addr,
+        // already converted to float32 (we set output_attr_.type=FLOAT32 at load).
+        int ret = rknn_run(ctx_, nullptr);
         if (ret < 0) {
             std::cerr << "[RknnBackend] rknn_run failed: " << ret << "\n";
             return dets;
         }
 
-        // Get outputs.
-        //
-        // The standard Ultralytics YOLOv8 RKNN export emits a single output
-        // tensor of shape [1, 4+nc, A] (row-major, float32), where:
-        //   - row 0..3: cx, cy, w, h (in 640x640 letterbox space)
-        //   - row 4..4+nc: per-class probabilities (already after sigmoid in
-        //     the canonical export — raw values ARE probabilities in [0,1])
-        // A = 8400 for a 640x640 input (80² + 40² + 20²).
-        //
-        // This is the exact same numeric logic as the pure-Rust parser in
-        // crates/yolov8/src/lib.rs (postprocess). Keep them in sync — the
-        // Rust CPU path and the C++ NPU path must produce identical boxes.
+        // Parse YOLOv8 output [1, 4+nc, anchors] (float32, row-major).
+        // Same numeric logic as crates/yolov8/src/lib.rs (postprocess).
         if (output_rows_ < 5 || output_anchors_ == 0) {
             std::cerr << "[RknnBackend] output shape not queried; cannot parse\n";
             return dets;
         }
 
-        rknn_output output;
-        memset(&output, 0, sizeof(output));
-        // want_float=1 lets librknnrt allocate the output buffer and dequantize
-        // int8 -> float32 internally. With want_float=0 the caller must prealloc
-        // via rknn_create_mem (zero-copy API) — more complex, not needed here.
-        // The earlier segfault was NOT caused by want_float=1 itself but by the
-        // empty input frame (fixed separately: bridge_main now decodes
-        // frame_data_b64).
-        output.want_float = 1;
-        output.is_prealloc = 0;
-
-        ret = rknn_outputs_get(ctx_, 0, &output, nullptr);
-        if (ret < 0) {
-            std::cerr << "[RknnBackend] rknn_outputs_get failed: " << ret << "\n";
-            return dets;
-        }
-
-        const size_t expected_floats =
-            static_cast<size_t>(output_rows_) * static_cast<size_t>(output_anchors_);
-        if (output.size < expected_floats * sizeof(float)) {
-            std::cerr << "[RknnBackend] output too small: " << output.size
-                      << " bytes, expected " << expected_floats * sizeof(float) << "\n";
-            rknn_outputs_release(ctx_, 1, &output);
-            return dets;
-        }
-
-        std::vector<float> floats;
-        const float* out_raw = static_cast<const float*>(output.buf);
-        floats.assign(out_raw, out_raw + expected_floats);
-
         const uint32_t rows = output_rows_;
         const uint32_t anchors = output_anchors_;
         const uint32_t nc = rows - 4;
+
+        // Output buffer is float32 already (output_attr_.type=FLOAT32 forced).
+        const float* out = static_cast<const float*>(output_mem_->virt_addr);
+        std::vector<float> floats(out, out + static_cast<size_t>(rows) * anchors);
 
         // Letterbox reverse-transform params (must match the Rust preprocessor).
         // The Rust side feeds a letterboxed 640x640 RGB frame; here we map back
@@ -426,7 +437,6 @@ public:
             dets.push_back(d);
         }
 
-        rknn_outputs_release(ctx_, 1, &output);
         return dets;
     }
 
@@ -462,10 +472,6 @@ private:
     uint32_t input_width_ = 0;
     uint32_t input_height_ = 0;
     std::string input_format_;
-    // Native input dtype/size queried from the model at load time, used by
-    // infer() to adapt the incoming RGB24 buffer.
-    uint32_t input_type_ = 0;        // 1=float32, 2=int8, ...
-    uint32_t input_size_native_ = 0;
     float confidence_threshold_ = 0.45f;
     float nms_threshold_ = 0.45f;
     // Queried from the model at load time: output is [1, output_rows_, output_anchors_].
@@ -473,6 +479,13 @@ private:
     uint32_t output_rows_ = 0;
     uint32_t output_anchors_ = 0;
     bool loaded_ = false;
+
+    // Zero-copy IO state (allocated once at load, reused per frame).
+    rknn_tensor_attr input_attr_;       // forced to UINT8 / NHWC
+    rknn_tensor_attr output_attr_;      // forced to FLOAT32 (NPU converts native fp16/int8)
+    rknn_tensor_mem* input_mem_ = nullptr;
+    rknn_tensor_mem* output_mem_ = nullptr;
+    bool is_quant_ = false;             // int8 model (vs float16) — diagnostics
 };
 #endif  // HAVE_RKNN
 
