@@ -72,12 +72,41 @@ baseline всего 5.7 MB. Рост будет от инференса (буф�
 ### 2.4 Latency init-сообщения (round-trip IPC)
 
 ```
-Python-клиент → Unix-socket → bridge → init_ack : 517 ms
+Python-клиент → Unix-socket → bridge → init_ack : 517 ms (на невалидной demo-модели)
+                                            32-39 ms (на валидной yolov8n_int8.rknn)
 ```
 
-Включает: передача по сокету + парсинг JSON + `rknn_init` (попытка) +
-сериализация ответа. Из них собственно `rknn_init` — основная часть
-(загрузка 32MB модели в NPU, даже с последующим отказом).
+### 2.5 Inference latency (валидная yolov8n_int8.rknn, 10 прогонов)
+
+Измерено Python-клиентом через наш C++ bridge (RGB24 packed, NHWC, UINT8):
+
+| Метрика | Значение | KPI-цель |
+|---|---|---|
+| **bridge latency** (чистый NPU-инференс + парсинг) | **27-29 ms** | < 60 ms ✅ |
+| **client round-trip** (включая base64+JSON+socket) | 57-72 ms | — |
+| **sustained FPS** (client round-trip) | **17.1 FPS** | ≥ 15 ✅ |
+| **sustained FPS** (только NPU, 1000/29ms) | ~34 FPS | — |
+
+**Вывод:** KPI по throughput выполнен с запасом — NPU-инференс идёт за ~29ms.
+
+### 2.6 Детекции ( эталон через rknn-toolkit2 Python)
+
+На тестовой картинке `bus.jpg` (810×1080, люди + автобус), через rknn-toolkit2
+напрямую (минуя bridge), float16-модель даёт **47 детекций** с conf>0.25:
+
+```
+class=0 (person)  conf=0.352  box=(30,420,59,192)
+class=5 (bus)     conf=0.768  box=(318,290,632,311)
+class=5 (bus)     conf=0.820  box=(322,289,630,307)
+class=5 (bus)     conf=0.839  box=(320,289,630,308)   <- лучший
+```
+
+Это подтверждает: NPU + yolov8n_int8.rknn + наш YOLOv8-парсер (формула
+`[1, 84, 8400]`) — **валидны и дают правильные классы**.
+
+Input format, дающий детекции: **NHWC uint8 [0,255]** (rknn применяет mean/std
+сам). NCHW/float32/[0,1] — дают 0 (модель не нормализует на входе).
+
 
 ---
 

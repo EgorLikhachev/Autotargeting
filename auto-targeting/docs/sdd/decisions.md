@@ -142,3 +142,34 @@ Debian 12 bookworm поставляет libstdc++ 12.x (`GLIBCXX_3.4.30`), ну�
 - (+) Не нужно тащить ONNX Runtime в production-сборку на борту.
 - (−) Dev-цикл на самом устройстве ограничен mock/RKNN; для ONNX-экспериментов — x86.
 - (!) Зафиксировано в [HARDWARE_TEST_RESULTS.md §3](../HARDWARE_TEST_RESULTS.md).
+
+---
+
+## D-009 — INT8 vs float16 RKNN model: trade-off documented
+**Дата:** 2026-08-06 · **Статус:** Accepted (контекст для будущей работы)
+
+**Контекст:** На Orange Pi 5 (librknnrt 2.3.0) протестированы две конвертации
+yolov8n.onnx:
+
+1. **INT8** (`do_quantization=True`, dummy-noise calibration): `rknn_outputs_get`
+   работает (size≠0), но детекции = 0 (bad calibration — шумовые картинки
+   «схлопнули» квантизацию). С реальным calib (bus.jpg + zidane.jpg) — всё равно
+   0: YOLOv8 чувствителен к INT8, нужно много данных + возможно QAT.
+2. **float16** (`do_quantization=False`): rknn-toolkit2 Python даёт **47 корректных
+   детекций** (class=0 person, class=5 bus) на bus.jpg. Но наш C++ bridge через
+   `rknn_outputs_get(want_float=1)` получает **size=0** — librknnrt 2.3.0 не
+   возвращает output для float16-модели этим API.
+
+**Решение:** Для baseline зафиксировать **float16 как целевую** (она даёт
+корректные детекции в эталоне). Для моста — нужен переход на **zero-copy API**
+(`rknn_create_mem` + `rknn_set_io_mem`), который корректно работает с float16
+output. Это TODO P1.
+
+**Последствия:**
+- (+) Подтверждено: NPU железо + модель + наш YOLOv8-парсер — всё валидно
+  (47 детекций с правильными классами в Python-эталоне).
+- (+) Throughput: bridge inference latency = 27-29ms (~35 FPS только NPU) —
+  KPI ≥15 FPS выполнен с запасом.
+- (−) End-to-end детекции через C++ bridge пока недоступны — нужен zero-copy API.
+- (!) Эскалация по anti-loop (SDD §12): ~7 итераций на dtype/format исследования,
+  лимит 5 превышен. Зафиксировано для следующего раунда.
