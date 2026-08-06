@@ -322,6 +322,21 @@ public:
             return dets;
         }
 
+        // DIAGNOSTIC: dump first/last values + max to understand output content.
+        {
+            const float* dbg = static_cast<const float*>(output_mem_->virt_addr);
+            const size_t total = static_cast<size_t>(rows) * anchors;
+            float mx = -1e30f, mn = 1e30f;
+            for (size_t i = 0; i < total; ++i) {
+                if (dbg[i] > mx) mx = dbg[i];
+                if (dbg[i] < mn) mn = dbg[i];
+            }
+            std::cerr << "[RknnBackend] out diag: n=" << total
+                      << " first5=[" << dbg[0] << "," << dbg[1] << "," << dbg[2]
+                      << "," << dbg[3] << "," << dbg[4] << "]"
+                      << " min=" << mn << " max=" << mx << "\n";
+        }
+
         // Parse YOLOv8 output [1, 4+nc, anchors] (float32, row-major).
         // Same numeric logic as crates/yolov8/src/lib.rs (postprocess).
         if (output_rows_ < 5 || output_anchors_ == 0) {
