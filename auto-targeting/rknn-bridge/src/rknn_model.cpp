@@ -325,7 +325,7 @@ public:
         // DIAGNOSTIC: dump first/last values + max to understand output content.
         {
             const float* dbg = static_cast<const float*>(output_mem_->virt_addr);
-            const size_t total = static_cast<size_t>(rows) * anchors;
+            const size_t total = static_cast<size_t>(output_rows_) * output_anchors_;
             float mx = -1e30f, mn = 1e30f;
             for (size_t i = 0; i < total; ++i) {
                 if (dbg[i] > mx) mx = dbg[i];
