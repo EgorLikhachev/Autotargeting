@@ -181,12 +181,16 @@ public:
             return false;
         }
 
-        // Query the input tensor attrs to log expected format/dtype/shape.
+        // Query the input tensor attrs to log expected format/dtype/shape AND
+        // remember the native input type so infer() can convert the incoming
+        // RGB24 frame to the model's expected dtype (float32 / int8 / uint8).
         if (io_num.n_input >= 1) {
             rknn_tensor_attr in_attr;
             memset(&in_attr, 0, sizeof(in_attr));
             in_attr.index = 0;
             rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &in_attr, sizeof(in_attr));
+            input_type_ = in_attr.type;  // 1=float32, 2=int8, 3=int16, ...
+            input_size_native_ = in_attr.size;
             std::cerr << "[RknnBackend] input: type=" << in_attr.type
                       << " fmt=" << in_attr.fmt
                       << " n_dims=" << in_attr.n_dims
@@ -245,18 +249,16 @@ public:
             return dets;
         }
 
-        // Set input.
-        //
-        // RKNN SDK 2.x renamed the pixel-layout enum: the old
-        // RKNN_TENSOR_FORMAT_RGB (SDK 1.x) is gone. RGB24 packed bytes are
-        // now described as NHWC layout (N=1 implicit, H=height, W=width,
-        // C=3 channels). The model itself defines the channel order (RGB vs
-        // BGR) at conversion time; here we only declare the memory layout.
+        // Set input. Always supply RGB24 packed as UINT8 NHWC — rknn applies
+        // the model's configured mean/std normalization internally (verified:
+        // rknn-toolkit2 inference with NHWC uint8 yields correct detections,
+        // matching the int8/float16 models we produce). The native input dtype
+        // (float32 for float16 models, int8 for int8 models) is handled by rknn.
         rknn_input input;
         memset(&input, 0, sizeof(input));
         input.index = 0;
         input.type = RKNN_TENSOR_UINT8;
-        input.size = input_width_ * input_height_ * 3;  // RGB24 packed
+        input.size = static_cast<size_t>(input_width_) * input_height_ * 3;
         input.buf = const_cast<uint8_t*>(frame_data);
         input.fmt = RKNN_TENSOR_NHWC;
 
@@ -460,6 +462,10 @@ private:
     uint32_t input_width_ = 0;
     uint32_t input_height_ = 0;
     std::string input_format_;
+    // Native input dtype/size queried from the model at load time, used by
+    // infer() to adapt the incoming RGB24 buffer.
+    uint32_t input_type_ = 0;        // 1=float32, 2=int8, ...
+    uint32_t input_size_native_ = 0;
     float confidence_threshold_ = 0.45f;
     float nms_threshold_ = 0.45f;
     // Queried from the model at load time: output is [1, output_rows_, output_anchors_].
