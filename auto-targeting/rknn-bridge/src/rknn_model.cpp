@@ -181,6 +181,22 @@ public:
             return false;
         }
 
+        // Query the input tensor attrs to log expected format/dtype/shape.
+        if (io_num.n_input >= 1) {
+            rknn_tensor_attr in_attr;
+            memset(&in_attr, 0, sizeof(in_attr));
+            in_attr.index = 0;
+            rknn_query(ctx_, RKNN_QUERY_INPUT_ATTR, &in_attr, sizeof(in_attr));
+            std::cerr << "[RknnBackend] input: type=" << in_attr.type
+                      << " fmt=" << in_attr.fmt
+                      << " n_dims=" << in_attr.n_dims
+                      << " dims=[" << in_attr.dims[0];
+            for (uint32_t i = 1; i < in_attr.n_dims && i < 16; ++i) {
+                std::cerr << "," << in_attr.dims[i];
+            }
+            std::cerr << "] size=" << in_attr.size << "\n";
+        }
+
         // Query the first output tensor's shape so we can parse YOLOv8 output
         // without hard-coding the class count / anchor count. The standard
         // Ultralytics YOLOv8 RKNN export has one output of shape [1, 4+nc, A]
