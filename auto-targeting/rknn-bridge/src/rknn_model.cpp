@@ -361,17 +361,17 @@ public:
         };
         std::vector<Cand> cands;
         cands.reserve(256);
-        const float* out = floats.data();
+        const float* f = floats.data();
         for (uint32_t a = 0; a < anchors; ++a) {
-            const float cx = out[0 * anchors + a];
-            const float cy = out[1 * anchors + a];
-            const float w = out[2 * anchors + a];
-            const float h = out[3 * anchors + a];
+            const float cx = f[0 * anchors + a];
+            const float cy = f[1 * anchors + a];
+            const float w = f[2 * anchors + a];
+            const float h = f[3 * anchors + a];
 
             uint32_t best_id = 0;
             float best_score = -INFINITY;
             for (uint32_t c = 0; c < nc; ++c) {
-                const float s = out[(4 + c) * anchors + a];
+                const float s = f[(4 + c) * anchors + a];
                 if (s > best_score) {
                     best_score = s;
                     best_id = c;
