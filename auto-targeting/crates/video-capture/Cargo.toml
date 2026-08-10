@@ -33,4 +33,8 @@ optional = true
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+tokio = { workspace = true }
+clap = { workspace = true }
+jpeg-decoder = { workspace = true }
+common = { workspace = true }
 tempfile = "3.10"
