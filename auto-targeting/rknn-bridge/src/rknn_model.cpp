@@ -314,6 +314,20 @@ public:
             }
         }
 
+        // DIAGNOSTIC: dump first bytes of input buffer after memcpy to verify
+        // frame integrity (base64 decode + memcpy correctness).
+        {
+            const uint8_t* din = static_cast<const uint8_t*>(input_mem_->virt_addr);
+            std::cerr << "[RknnBackend] in diag: first8=[" << (int)din[0] << ","
+                      << (int)din[1] << "," << (int)din[2] << "," << (int)din[3]
+                      << "," << (int)din[4] << "," << (int)din[5] << ","
+                      << (int)din[6] << "," << (int)din[7] << "]"
+                      << " src8=[" << (int)frame_data[0] << "," << (int)frame_data[1]
+                      << "," << (int)frame_data[2] << "," << (int)frame_data[3]
+                      << "," << (int)frame_data[4] << "," << (int)frame_data[5]
+                      << "," << (int)frame_data[6] << "," << (int)frame_data[7] << "]\n";
+        }
+
         // Run inference. NPU writes output directly into output_mem_->virt_addr,
         // already converted to float32 (we set output_attr_.type=FLOAT32 at load).
         int ret = rknn_run(ctx_, nullptr);
