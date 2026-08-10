@@ -314,51 +314,12 @@ public:
             }
         }
 
-        // DIAGNOSTIC: dump first bytes of input buffer after memcpy to verify
-        // frame integrity (base64 decode + memcpy correctness).
-        {
-            const uint8_t* din = static_cast<const uint8_t*>(input_mem_->virt_addr);
-            std::cerr << "[RknnBackend] in diag: first8=[" << (int)din[0] << ","
-                      << (int)din[1] << "," << (int)din[2] << "," << (int)din[3]
-                      << "," << (int)din[4] << "," << (int)din[5] << ","
-                      << (int)din[6] << "," << (int)din[7] << "]"
-                      << " src8=[" << (int)frame_data[0] << "," << (int)frame_data[1]
-                      << "," << (int)frame_data[2] << "," << (int)frame_data[3]
-                      << "," << (int)frame_data[4] << "," << (int)frame_data[5]
-                      << "," << (int)frame_data[6] << "," << (int)frame_data[7] << "]\n";
-        }
-
         // Run inference. NPU writes output directly into output_mem_->virt_addr,
         // already converted to float32 (we set output_attr_.type=FLOAT32 at load).
         int ret = rknn_run(ctx_, nullptr);
         if (ret < 0) {
             std::cerr << "[RknnBackend] rknn_run failed: " << ret << "\n";
             return dets;
-        }
-
-        // DIAGNOSTIC: dump first/last values + max to understand output content.
-        // Also probe both possible layouts: [1,84,8400] (rows-major) vs
-        // [1,8400,84] (anchors-major) — the YOLOv8 RKNN export is ambiguous.
-        {
-            const float* dbg = static_cast<const float*>(output_mem_->virt_addr);
-            const size_t total = static_cast<size_t>(output_rows_) * output_anchors_;
-            float mx = -1e30f, mn = 1e30f;
-            for (size_t i = 0; i < total; ++i) {
-                if (dbg[i] > mx) mx = dbg[i];
-                if (dbg[i] < mn) mn = dbg[i];
-            }
-            std::cerr << "[RknnBackend] out diag: n=" << total
-                      << " first5=[" << dbg[0] << "," << dbg[1] << "," << dbg[2]
-                      << "," << dbg[3] << "," << dbg[4] << "]"
-                      << " min=" << mn << " max=" << mx << "\n";
-            // rows-major [1,84,8400]: score-class0-anchor0 = dbg[4*8400+0]
-            std::cerr << "[RknnBackend]   rows-major: score[c0,a0]=dbg[4*8400+0]="
-                      << dbg[4 * output_anchors_ + 0]
-                      << " score[c0,a100]=" << dbg[4 * output_anchors_ + 100] << "\n";
-            // anchors-major [1,8400,84]: score-class0-anchor0 = dbg[0*84+4]
-            std::cerr << "[RknnBackend]   anchors-major: score[a0,c0]=dbg[0*84+4]="
-                      << dbg[0 * output_rows_ + 4]
-                      << " score[a100,c0]=" << dbg[100 * output_rows_ + 4] << "\n";
         }
 
         // Parse YOLOv8 output [1, 4+nc, anchors] (float32, row-major).
@@ -401,6 +362,19 @@ public:
         std::vector<Cand> cands;
         cands.reserve(256);
         const float* f = floats.data();
+        // YOLOv8 RKNN export emits RAW class logits (no sigmoid baked in), so
+        // we apply sigmoid here: sigma(x) = 1 / (1 + exp(-x)). Box coords
+        // (rows 0..3) are NOT passed through sigmoid — they are already in
+        // 640-space pixels. Only rows 4..4+nc (class scores) are logits.
+        const auto sigmoid = [](float x) {
+            if (x >= 0.0f) {
+                const float z = std::exp(-x);
+                return 1.0f / (1.0f + z);
+            } else {
+                const float z = std::exp(x);
+                return z / (1.0f + z);
+            }
+        };
         for (uint32_t a = 0; a < anchors; ++a) {
             const float cx = f[0 * anchors + a];
             const float cy = f[1 * anchors + a];
@@ -410,7 +384,7 @@ public:
             uint32_t best_id = 0;
             float best_score = -INFINITY;
             for (uint32_t c = 0; c < nc; ++c) {
-                const float s = f[(4 + c) * anchors + a];
+                const float s = sigmoid(f[(4 + c) * anchors + a]);
                 if (s > best_score) {
                     best_score = s;
                     best_id = c;
