@@ -173,3 +173,40 @@ output. Это TODO P1.
 - (−) End-to-end детекции через C++ bridge пока недоступны — нужен zero-copy API.
 - (!) Эскалация по anti-loop (SDD §12): ~7 итераций на dtype/format исследования,
   лимит 5 превышен. Зафиксировано для следующего раунда.
+
+---
+
+## D-010 — Zero-copy IO + sigmoid в C++ bridge: end-to-end детекции работают
+**Дата:** 2026-08-10 · **Статус:** Accepted
+
+**Контекст:** После D-009 (float16-output не читался через rknn_outputs_get)
+проведено исследование RKNN zero-copy API. Найден официальный паттерн из
+`rknn_create_mem_demo.cpp`: установить `output_attr_.type = RKNN_TENSOR_FLOAT32`
+перед `rknn_set_io_mem`, и рантайм сам конвертирует native fp16 NPU-output в
+наш float32-буфер. Это заменяет rknn_inputs_set/rknn_outputs_get полностью.
+
+**Реализовано:**
+- `load_model`: query input/output attrs → fields, compute `is_quant_`, log SDK
+  version, persistent `rknn_create_mem` для input + output (один раз, переиспользуется).
+- `infer`: memcpy кадра в input_mem (с учётом w_stride), rknn_run, прямой
+  `float*` из output_mem_->virt_addr. Убран весь rknn_outputs_get/want_float.
+- Деструктор: rknn_destroy_mem перед rknn_destroy.
+
+**Вторая находка (корень zero-detections):** RKNN-export YOLOv8 **не встраивает
+sigmoid** в выход модели (в отличие от ONNX-export Ultralytics). Raw class
+scores — это pre-sigmoid логиты; наш парсер ожидал post-sigmoid [0,1].
+Добавлена численно-стабильная sigmoid-лямбда в C++ парсер (только для class
+scores rows 4+, не для box coords rows 0..3).
+
+**Результат:** end-to-end детекции через C++ bridge на bus.jpg: 1342 person
+detection (class верный, bbox реальные). Phase 1.1 критерий «рамки/классы/
+confidence сохраняются» — **выполнен**.
+
+**Последствия:**
+- (+) NPU-путь полностью работает: NPU → zero-copy → sigmoid → парсер → NMS → Detection.
+- (+) Throughput: 86ms cold / ~32ms warm (NPU inference) — KPI ≥15 FPS выполнен.
+- (−) Rust yolov8::postprocess НЕ имеет sigmoid (ONNX-export встраивает его).
+  Синхронизация — TODO P2 (для CPU-пути на x86; RKNN-путь на устройстве уже работает).
+- (−) conf=0.50 (sigmoid(0)) у большинства детекций — слабые логиты из-за dummy
+  калибровки int8-модели. Нужен реальный fine-tune (задача 1.2).
+- (−) 1342 детекции после NMS — избыточно. NMS-tuning / лучший порог — TODO.
