@@ -186,11 +186,15 @@ public:
         }
 
         // Log SDK version — critical for diagnosing header/library mismatches.
+        // Gated behind RKNN_BRIDGE_VERBOSE to keep the release build quiet.
         rknn_sdk_version sdk_ver;
         memset(&sdk_ver, 0, sizeof(sdk_ver));
         if (rknn_query(ctx_, RKNN_QUERY_SDK_VERSION, &sdk_ver, sizeof(sdk_ver)) == 0) {
+#ifdef RKNN_BRIDGE_VERBOSE
             std::cerr << "[RknnBackend] SDK api=" << sdk_ver.api_version
                       << " drv=" << sdk_ver.drv_version << "\n";
+#endif
+            (void)sdk_ver;  // suppress unused-var when not verbose
         }
 
         // Query the INPUT tensor attrs and store in input_attr_ (used for
@@ -206,6 +210,7 @@ public:
         }
         input_attr_.type = RKNN_TENSOR_UINT8;
         input_attr_.fmt = RKNN_TENSOR_NHWC;
+#ifdef RKNN_BRIDGE_VERBOSE
         std::cerr << "[RknnBackend] input: type=" << input_attr_.type
                   << " fmt=" << input_attr_.fmt
                   << " n_dims=" << input_attr_.n_dims
@@ -215,6 +220,7 @@ public:
         }
         std::cerr << "] size=" << input_attr_.size
                   << " size_with_stride=" << input_attr_.size_with_stride << "\n";
+#endif
 
         // Query the OUTPUT tensor attrs and store in output_attr_.
         // The standard Ultralytics YOLOv8 RKNN export has one output of shape
@@ -245,11 +251,13 @@ public:
         // rknn_set_io_mem, we ask the runtime to convert native NPU output
         // (fp16 or int8) into a float32 buffer that we can read directly.
         output_attr_.type = RKNN_TENSOR_FLOAT32;
+#ifdef RKNN_BRIDGE_VERBOSE
         std::cerr << "[RknnBackend] output: type=" << output_attr_.type
                   << " n_dims=" << output_attr_.n_dims
                   << " n_elems=" << output_attr_.n_elems
                   << " size=" << output_attr_.size
                   << " is_quant=" << is_quant_ << "\n";
+#endif
 
         // === Allocate persistent zero-copy tensor memory (once, reused per frame).
         // This bypasses rknn_inputs_set / rknn_outputs_get entirely — the NPU

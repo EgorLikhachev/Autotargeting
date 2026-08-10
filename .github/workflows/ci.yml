@@ -10,6 +10,13 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# The repo has a nested layout: the Rust workspace lives in auto-targeting/.
+# All `run:` steps default to that directory so cargo/scenario/sim paths
+# resolve correctly (cd sim/sitl becomes auto-targeting/sim/sitl).
+defaults:
+  run:
+    working-directory: auto-targeting
+
 jobs:
   # Fast checks on every PR — target < 5 min
   pr-check:
@@ -118,7 +125,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage/
+          path: auto-targeting/coverage/
           retention-days: 7
 
   # Phase 1.1 soak test — runs a short (2 min) smoke of the minimal CV loop
@@ -164,7 +171,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: soak-run
-          path: output/soak/
+          path: auto-targeting/output/soak/
           retention-days: 7
 
   # SITL integration tests — runs on main pushes
@@ -269,16 +276,21 @@ jobs:
         with:
           name: auto-targeting-aarch64
           path: |
-            target/aarch64-unknown-linux-gnu/release/auto-targeting
+            auto-targeting/target/aarch64-unknown-linux-gnu/release/auto-targeting
           retention-days: 14
 
-  # Smoke test the built binary in an aarch64 emulator (QEMU)
+  # Smoke test the built binary in an aarch64 emulator (QEMU).
+  # This job overrides working-directory to the repo root because it operates
+  # on the downloaded artifact (./bin/), not on the Rust workspace.
   smoke-test:
     name: Smoke test binary (QEMU)
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     needs: cross-compile
     if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
 

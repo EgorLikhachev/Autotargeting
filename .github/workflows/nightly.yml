@@ -10,6 +10,13 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# The repo has a nested layout: the Rust workspace lives in auto-targeting/.
+# All `run:` steps default to that directory so cargo/scenario/sim paths
+# resolve correctly (cd sim/sitl becomes auto-targeting/sim/sitl).
+defaults:
+  run:
+    working-directory: auto-targeting
+
 jobs:
   # Full test suite — runs all tests including ignored
   full-tests:
