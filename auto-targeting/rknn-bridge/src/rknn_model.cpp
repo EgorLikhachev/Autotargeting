@@ -323,6 +323,8 @@ public:
         }
 
         // DIAGNOSTIC: dump first/last values + max to understand output content.
+        // Also probe both possible layouts: [1,84,8400] (rows-major) vs
+        // [1,8400,84] (anchors-major) — the YOLOv8 RKNN export is ambiguous.
         {
             const float* dbg = static_cast<const float*>(output_mem_->virt_addr);
             const size_t total = static_cast<size_t>(output_rows_) * output_anchors_;
@@ -335,6 +337,14 @@ public:
                       << " first5=[" << dbg[0] << "," << dbg[1] << "," << dbg[2]
                       << "," << dbg[3] << "," << dbg[4] << "]"
                       << " min=" << mn << " max=" << mx << "\n";
+            // rows-major [1,84,8400]: score-class0-anchor0 = dbg[4*8400+0]
+            std::cerr << "[RknnBackend]   rows-major: score[c0,a0]=dbg[4*8400+0]="
+                      << dbg[4 * output_anchors_ + 0]
+                      << " score[c0,a100]=" << dbg[4 * output_anchors_ + 100] << "\n";
+            // anchors-major [1,8400,84]: score-class0-anchor0 = dbg[0*84+4]
+            std::cerr << "[RknnBackend]   anchors-major: score[a0,c0]=dbg[0*84+4]="
+                      << dbg[0 * output_rows_ + 4]
+                      << " score[a100,c0]=" << dbg[100 * output_rows_ + 4] << "\n";
         }
 
         // Parse YOLOv8 output [1, 4+nc, anchors] (float32, row-major).
