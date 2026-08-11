@@ -107,7 +107,59 @@ class=5 (bus)     conf=0.839  box=(320,289,630,308)   <- лучший
 Input format, дающий детекции: **NHWC uint8 [0,255]** (rknn применяет mean/std
 сам). NCHW/float32/[0,1] — дают 0 (модель не нормализует на входе).
 
-### 2.7 End-to-end детекции через C++ bridge (ПОСЛЕ sigmoid + zero-copy фиксов)
+### 2.7a USB-камера: задержка захвата и декодирования (Arducam OV9782)
+
+**Камера:** Arducam OV9782 USB (global-shutter, UVC).
+**Подключение:** USB 2.0, `/dev/video0`, формат — MJPG (единственный поддерживаемый).
+**Дата замера:** 2026-08-10. Инструмент: `examples/camera_latency.rs` (feature `v4l2`).
+
+#### Сырой capture throughput (v4l2-ctl, без decode — потолок камеры)
+
+| Режим | Согласованный FPS | Реальный throughput (200 кадров) | Размер кадра MJPG |
+|---|---|---|---|
+| 640×480 @ 100fps | 100.000 | **92–100 fps** | ~17.8 KB |
+| 1280×720 @ 60fps | 60.000 | **~62 fps** | ~63.8 KB |
+
+USB bandwidth: 100fps × 17.8KB = **1.78 MB/s** (USB 2.0 = 60 MB/s — запас ×30).
+
+#### Capture + decode latency (Rust, 100 кадров, прогрев 5)
+
+| Режим | Capture p50 | Decode (MJPG→RGB) p50 | Total p50 | Total p95 | Sustained FPS |
+|---|---|---|---|---|---|
+| 640×480 @ 100 | 23.2 ms | 8.9 ms | 32.0 ms | 60.3 ms | 20.9 |
+| 1280×720 @ 60 | 23.4 ms | 8.6 ms | 32.0 ms | 46.2 ms | 21.4 |
+
+**Аномалия:** sustained FPS (~21) в обоих режимах сильно ниже потолка камеры
+(100/60). Причина — **последовательный capture loop**: recv → decode → recv,
+где decode (8–9ms) блокирует приём следующего кадра. Камера набивает буфер,
+код читает «старый» кадр → capture latency завышена, реальный throughput
+ограничен `(capture + decode)` временем, а не камерой.
+
+#### End-to-end budget (capture + decode + NPU inference)
+
+| Стадия | Latency p50 |
+|---|---|
+| Capture (V4L2 dequeue) | 23 ms |
+| Decode (MJPG → RGB24) | 9 ms |
+| **NPU inference** | **29 ms** |
+| **End-to-end total** | **~61 ms** |
+
+При конвейеризации (capture и decode в разных потоках) end-to-end определяется
+максимальной стадией: max(23, 9, 29) = **29ms → ~34 FPS**. Без конвейера
+(текущая последовательная реализация) — **61ms → ~16 FPS**.
+
+#### Вывод и рекомендация
+
+Задержка камеры (capture + decode) = **32 ms p50** — это приемлемо для Phase 1.1
+(KPI end-to-end < 150 ms оставляет 118 ms на inference+command, а наш NPU
+берёт 29 ms). Однако **текущая последовательная реализация V4l2Source режет
+throughput в ~5 раз** (21 fps вместо 100). Для production нужен pipelined
+capture: отдельный поток для V4L2-dequeue, отдельный — для MJPG-decode,
+связь через `mpsc::channel` (drop-old политика уже есть в `queue_depth`).
+Это поднимет sustained FPS с 21 до ~34 (лимит NPU) или до ~100 (если
+инференс не нужен каждому кадру).
+
+### 2.7b End-to-end детекции через C++ bridge (ПОСЛЕ sigmoid + zero-copy фиксов)
 
 Финальный прогон с `bus.jpg` через полный путь Python-клиент → Unix-socket →
 C++ `rknn-bridge` → NPU → наш YOLOv8 парсер:
