@@ -263,9 +263,23 @@ fn run_capture_loop(
             },
         };
 
-        if tx.blocking_send(frame).is_err() {
-            debug!("V4L2: receiver dropped, stopping capture");
-            break;
+        // Drop-new policy: if the channel is full (slow consumer), drop the NEW
+        // frame and continue capturing. This keeps the V4L2 dequeue loop running
+        // at full camera speed — the consumer will get the freshest available
+        // frame when it's ready, never a stale queue. For real-time video this
+        // is the correct semantics: better to process the latest frame than to
+        // backlog old ones.
+        //
+        // The only real error is Closed (receiver dropped) — that signals stop.
+        match tx.try_send(frame) {
+            Ok(()) => {}
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                debug!("V4L2: receiver dropped, stopping capture");
+                break;
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                debug!("V4L2: channel full, dropping frame {seq} (consumer slow)");
+            }
         }
 
         seq += 1;

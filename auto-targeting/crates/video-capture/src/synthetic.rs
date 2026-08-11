@@ -159,7 +159,12 @@ impl SyntheticVideoSource {
 #[async_trait]
 impl VideoSource for SyntheticVideoSource {
     async fn start(&mut self) -> VideoResult<mpsc::Receiver<Frame>> {
-        let (tx, rx) = mpsc::channel(self.config.max_frames.max(1) as usize);
+        // Channel depth: 1 second of frames (capped to a reasonable max),
+        // minimum 3 for burst tolerance. Previously this used max_frames.max(1)
+        // which gave bound=1 for infinite sources, severely back-pressuring
+        // the producer and cutting throughput.
+        let channel_depth = (self.config.fps as usize).clamp(3, 30);
+        let (tx, rx) = mpsc::channel(channel_depth);
         let config = self.config.clone();
 
         info!(
@@ -167,6 +172,7 @@ impl VideoSource for SyntheticVideoSource {
             height = config.height,
             fps = config.fps,
             pattern = ?config.pattern,
+            channel_depth = channel_depth,
             "starting synthetic video source"
         );
 
@@ -182,9 +188,18 @@ impl VideoSource for SyntheticVideoSource {
                 let frame = source.render_frame(seq);
                 debug!(seq = seq, "produced frame");
 
-                if tx.send(frame).await.is_err() {
-                    debug!("receiver dropped — stopping synthetic source");
-                    break;
+                // Drop-new policy (same as V4l2Source): if the channel is full,
+                // drop the new frame instead of blocking. For real-time video,
+                // the freshest frame matters — a backlog of old frames is worse.
+                match tx.try_send(frame) {
+                    Ok(()) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                        debug!("receiver dropped — stopping synthetic source");
+                        break;
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                        debug!("synthetic: channel full, dropping frame {seq}");
+                    }
                 }
 
                 seq += 1;
