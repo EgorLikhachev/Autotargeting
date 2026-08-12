@@ -341,25 +341,32 @@ fn run_direct_capture(
     debug!(buffers = n_bufs, "V4L2 direct buffers allocated");
 
     // 5. Query + mmap each buffer, then queue.
+    // Use raw byte buffers to eliminate any struct layout ambiguity.
     let mut mapped: Vec<MappedBuffer> = Vec::with_capacity(n_bufs as usize);
     for i in 0..n_bufs {
-        let mut buf = V4l2Buffer::default();
-        buf.index = i;
-        unsafe { ioctl(fd, VIDIOC_QUERYBUF, &mut buf)? };
-        // DIAGNOSTIC: dump bytes around union m and length to compare with C kernel struct.
-        let raw_ptr = &buf as *const V4l2Buffer as *const u8;
-        eprintln!("[v4l2-direct] QUERYBUF buf[{}] raw bytes 64-88:", i);
-        for off in (64..88).step_by(4) {
-            let val = unsafe { *(raw_ptr.add(off) as *const u32) };
-            eprintln!("  offset {}: 0x{:08x} ({})", off, val, val);
-        }
-        let len = buf.length as usize;
-        let offset = buf.m_offset as usize;
-        eprintln!("[v4l2-direct] m_offset={} length={}", offset, len);
+        let mut buf = [0u8; 88]; // sizeof(v4l2_buffer) = 88
+        // Set fields by offset (verified against kernel struct on aarch64 64-bit):
+        //   offset 0: index (u32)
+        //   offset 4: type (u32) = V4L2_BUF_TYPE_VIDEO_CAPTURE
+        //   offset 68: memory (u32) = V4L2_MEMORY_MMAP
+        buf[0..4].copy_from_slice(&i.to_ne_bytes());
+        buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
+        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        unsafe { ioctl_raw(fd, VIDIOC_QUERYBUF, buf.as_mut_ptr())? };
+
+        // Read results by offset:
+        //   offset 72: m.offset (u32) — MMAP buffer offset
+        //   offset 80: length (u32) — buffer length
+        let offset = u32::from_ne_bytes([buf[72], buf[73], buf[74], buf[75]]) as usize;
+        let length = u32::from_ne_bytes([buf[80], buf[81], buf[82], buf[83]]) as usize;
+        // Some drivers return length=0 in QUERYBUF; use sizeimage as fallback.
+        let mmap_len = if length > 0 { length } else { buf_size };
+        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: offset={} length={} mmap_len={}", i, offset, length, mmap_len);
+
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
-                len,
+                mmap_len,
                 libc::PROT_READ | libc::PROT_WRITE,
                 libc::MAP_SHARED,
                 fd,
@@ -369,15 +376,15 @@ fn run_direct_capture(
         if ptr == libc::MAP_FAILED {
             let err = std::io::Error::last_os_error();
             return Err(VideoCaptureError::DeviceConfig(format!(
-                "mmap buffer {i} failed: len={len} offset={offset} fd={fd} err={err}"
+                "mmap buffer {i} failed: len={mmap_len} offset={offset} err={err}"
             )));
         }
-        mapped.push(MappedBuffer { ptr, length: len });
+        mapped.push(MappedBuffer { ptr, length: mmap_len });
 
-        // Queue this buffer.
-        buf.typ = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-        unsafe { ioctl(fd, VIDIOC_QBUF, &mut buf)? };
+        // Queue this buffer (VIDIOC_QBUF) — same raw buffer, re-set type/memory.
+        buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
+        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        unsafe { ioctl_raw(fd, VIDIOC_QBUF, buf.as_mut_ptr())? };
     }
 
     // 6. Start streaming.
@@ -385,33 +392,30 @@ fn run_direct_capture(
     unsafe { ioctl(fd, VIDIOC_STREAMON, &mut stream_on)? };
     info!("V4L2 direct streaming started");
 
-    // 7. Capture loop.
+    // 7. Capture loop (raw byte buffer for DQBUF/QBUF).
     let mut seq: u64 = 0;
     loop {
         if stop_flag.load(Ordering::SeqCst) {
             break;
         }
 
-        // Dequeue (VIDIOC_DQBUF) — hot path.
-        let mut buf = V4l2Buffer::default();
-        buf.typ = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-        match unsafe { ioctl(fd, VIDIOC_DQBUF, &mut buf) } {
+        // Dequeue (VIDIOC_DQBUF) — hot path, raw buffer.
+        let mut buf = [0u8; 88];
+        buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
+        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        match unsafe { ioctl_raw(fd, VIDIOC_DQBUF, buf.as_mut_ptr()) } {
             Ok(()) => {}
             Err(e) => {
-                if stop_flag.load(Ordering::SeqCst) {
-                    break;
-                }
-                // EAGAIN is normal in non-blocking mode; we use blocking so it's unexpected.
+                if stop_flag.load(Ordering::SeqCst) { break; }
                 warn!(error = %e, "V4L2 direct dequeue error");
                 std::thread::sleep(std::time::Duration::from_millis(1));
                 continue;
             }
         }
 
-        // Copy frame data from mmap.
-        let data_len = buf.bytesused as usize;
-        let buf_idx = buf.index as usize;
+        // Read results by offset.
+        let bytesused = u32::from_ne_bytes([buf[8], buf[9], buf[10], buf[11]]) as usize;
+        let buf_idx = u32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
         let frame_data = if buf_idx < mapped.len() && data_len > 0 {
             unsafe {
                 std::slice::from_raw_parts(mapped[buf_idx].ptr as *const u8, data_len).to_vec()
@@ -420,11 +424,11 @@ fn run_direct_capture(
             Vec::new()
         };
 
-        // Re-queue the buffer immediately (before processing).
-        buf.typ = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
+        // Re-queue the buffer immediately.
+        buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
+        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
         unsafe {
-            let _ = ioctl(fd, VIDIOC_QBUF, &mut buf);
+            let _ = ioctl_raw(fd, VIDIOC_QBUF, buf.as_mut_ptr());
         }
 
         // Build + send Frame (drop-old via try_send).
@@ -451,7 +455,7 @@ fn run_direct_capture(
     }
 
     // 8. Stop + cleanup.
-    let mut stream_off = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    let mut stream_off: u32 = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     unsafe {
         let _ = ioctl(fd, VIDIOC_STREAMOFF, &mut stream_off);
     }
@@ -463,9 +467,21 @@ fn run_direct_capture(
     Ok(())
 }
 
-/// Raw ioctl wrapper.
+/// Raw ioctl wrapper (typed pointer).
 unsafe fn ioctl<T>(fd: libc::c_int, request: u64, arg: *mut T) -> VideoResult<()> {
-    let ret = libc::ioctl(fd, request as _, arg as *mut _);
+    let ret = libc::ioctl(fd, request as libc::c_ulong, arg as *mut libc::c_void);
+    if ret < 0 {
+        let err = std::io::Error::last_os_error();
+        return Err(VideoCaptureError::Capture(format!(
+            "ioctl(0x{request:x}) failed: {err}"
+        )));
+    }
+    Ok(())
+}
+
+/// Raw ioctl wrapper (void pointer, for [u8; N] buffers).
+unsafe fn ioctl_raw(fd: libc::c_int, request: u64, arg: *mut u8) -> VideoResult<()> {
+    let ret = libc::ioctl(fd, request as libc::c_ulong, arg as *mut libc::c_void);
     if ret < 0 {
         let err = std::io::Error::last_os_error();
         return Err(VideoCaptureError::Capture(format!(
