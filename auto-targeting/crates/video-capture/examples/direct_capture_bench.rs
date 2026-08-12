@@ -23,6 +23,13 @@ struct Args {
 }
 
 fn main() {
+    // Init tracing to stderr to see capture thread errors.
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
+            .add_directive(tracing::Level::DEBUG.into()))
+        .with_writer(std::io::stderr)
+        .init();
+
     let args = Args::parse();
     println!("=== Direct V4L2 ioctl Benchmark ===");
     println!("{} {}x{} @ {}fps, {} frames", args.device, args.width, args.height, args.fps, args.count);
