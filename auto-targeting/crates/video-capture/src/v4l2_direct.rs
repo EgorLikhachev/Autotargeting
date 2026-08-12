@@ -346,9 +346,16 @@ fn run_direct_capture(
         let mut buf = V4l2Buffer::default();
         buf.index = i;
         unsafe { ioctl(fd, VIDIOC_QUERYBUF, &mut buf)? };
-        let len = buf_size; // use sizeimage from S_FMT (QUERYBUF length may be 0 on some drivers)
+        // DIAGNOSTIC: dump bytes around union m and length to compare with C kernel struct.
+        let raw_ptr = &buf as *const V4l2Buffer as *const u8;
+        eprintln!("[v4l2-direct] QUERYBUF buf[{}] raw bytes 64-88:", i);
+        for off in (64..88).step_by(4) {
+            let val = unsafe { *(raw_ptr.add(off) as *const u32) };
+            eprintln!("  offset {}: 0x{:08x} ({})", off, val, val);
+        }
+        let len = buf.length as usize;
         let offset = buf.m_offset as usize;
-        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: len(sizeimage)={} offset={}", i, len, offset);
+        eprintln!("[v4l2-direct] m_offset={} length={}", offset, len);
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
