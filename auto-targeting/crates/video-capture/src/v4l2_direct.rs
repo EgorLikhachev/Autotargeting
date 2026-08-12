@@ -307,8 +307,15 @@ fn run_direct_capture(
     unsafe { ioctl(fd, VIDIOC_S_FMT, &mut fmt)? };
     let neg_w = fmt.pix.width;
     let neg_h = fmt.pix.height;
-    eprintln!("[v4l2-direct] S_FMT result: {}x{} pixfmt=0x{:x} sizeimage={}",
-        neg_w, neg_h, fmt.pix.pixelformat, fmt.pix.sizeimage);
+    // Buffer size from S_FMT — some drivers don't fill buf.length in QUERYBUF,
+    // so we use sizeimage as the mmap length.
+    let buf_size = if fmt.pix.sizeimage > 0 {
+        fmt.pix.sizeimage as usize
+    } else {
+        (neg_w as usize * neg_h as usize * 3).max(1024) // fallback estimate
+    };
+    eprintln!("[v4l2-direct] S_FMT: {}x{} pixfmt=0x{:x} buf_size={}",
+        neg_w, neg_h, fmt.pix.pixelformat, buf_size);
     info!(width = neg_w, height = neg_h, "V4L2 direct format negotiated");
 
     // 3. Set frame rate (VIDIOC_S_PARM).
@@ -339,9 +346,9 @@ fn run_direct_capture(
         let mut buf = V4l2Buffer::default();
         buf.index = i;
         unsafe { ioctl(fd, VIDIOC_QUERYBUF, &mut buf)? };
-        let len = buf.length as usize;
+        let len = buf_size; // use sizeimage from S_FMT (QUERYBUF length may be 0 on some drivers)
         let offset = buf.m_offset as usize;
-        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: length={} offset={}", i, len, offset);
+        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: len(sizeimage)={} offset={}", i, len, offset);
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
