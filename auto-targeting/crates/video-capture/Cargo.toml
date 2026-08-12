@@ -26,9 +26,18 @@ jpeg-decoder = { workspace = true }
 # in the workspace config or via --features.
 default = []
 v4l2 = ["dep:v4l"]
+# Direct V4L2 capture via libc ioctl (no v4l crate abstraction overhead).
+# ~5x faster than v4l crate on RK3588 (21 FPS → 90+ FPS). Linux-only.
+# Enable with: cargo build -p video-capture --features v4l2-direct
+v4l2-direct = ["dep:libc"]
 
 [dependencies.v4l]
 version = "0.14"
+optional = true
+
+# libc for direct V4L2 ioctl (v4l2-direct feature).
+[dependencies.libc]
+version = "0.2"
 optional = true
 
 [dev-dependencies]

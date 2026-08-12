@@ -148,16 +148,36 @@ USB bandwidth: 100fps × 17.8KB = **1.78 MB/s** (USB 2.0 = 60 MB/s — запа�
 максимальной стадией: max(23, 9, 29) = **29ms → ~34 FPS**. Без конвейера
 (текущая последовательная реализация) — **61ms → ~16 FPS**.
 
-#### Вывод и рекомендация
+#### Обновление после drop-old фикса (2026-08-10)
 
-Задержка камеры (capture + decode) = **32 ms p50** — это приемлемо для Phase 1.1
-(KPI end-to-end < 150 ms оставляет 118 ms на inference+command, а наш NPU
-берёт 29 ms). Однако **текущая последовательная реализация V4l2Source режет
-throughput в ~5 раз** (21 fps вместо 100). Для production нужен pipelined
-capture: отдельный поток для V4L2-dequeue, отдельный — для MJPG-decode,
-связь через `mpsc::channel` (drop-old политика уже есть в `queue_depth`).
-Это поднимет sustained FPS с 21 до ~34 (лимит NPU) или до ~100 (если
-инференс не нужен каждому кадру).
+Применён drop-old capture policy (`try_send` вместо `blocking_send` в
+`v4l2_real.rs`) + A/B тест (sequential vs pipeline режим в `camera_latency`):
+
+| Режим | Sustained FPS | Capture p50 |
+|---|---|---|
+| Sequential (decode blocks) | 21.1 | 22 ms |
+| Pipeline (capture-only, decode off path) | 18.8 | 32 ms |
+
+**Результат неожиданный:** pipeline-режим НЕ ускорил capture. Причина
+выяснилась через сравнение с `v4l2-ctl`:
+
+#### ⚠️ Корневая причина: `v4l` Rust crate — узкое место
+
+`v4l2-ctl` (C, прямой V4L2 ioctl) стабильно даёт **100 FPS** при 640×480 MJPG
+(проверено с 2/4/8 buffers). Наш Rust-код через `v4l 0.14` crate — только
+**~21 FPS**. Разница **в 5 раз** при идентичных системных вызовах.
+
+| Инструмент | V4L2 ioctls | Sustained FPS |
+|---|---|---|
+| `v4l2-ctl` (C, libv4l2) | VIDIOC_DQBUF/QBUF прямой | **100** |
+| Наш код (Rust, `v4l` crate) | MMapStream::next() abstraction | **21** |
+
+USB не виноват: камера на USB 2.0 (480M), 17.8KB/кадр × 100fps = 1.78 MB/s
+(загрузка шины <3%).
+
+**Решение:** заменить `v4l` crate abstraction на прямой V4L2 ioctl через
+`nix` crate (FFI к `VIDIOC_DQBUF`/`VIDIOC_QBUF`/`VIDIOC_S_FMT`). Ожидаемый
+результат: capture с 21 FPS → ~90-100 FPS (камерный потолок).
 
 ### 2.7b End-to-end детекции через C++ bridge (ПОСЛЕ sigmoid + zero-copy фиксов)
 

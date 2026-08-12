@@ -210,3 +210,31 @@ confidence сохраняются» — **выполнен**.
 - (−) conf=0.50 (sigmoid(0)) у большинства детекций — слабые логиты из-за dummy
   калибровки int8-модели. Нужен реальный fine-tune (задача 1.2).
 - (−) 1342 детекции после NMS — избыточно. NMS-tuning / лучший порог — TODO.
+
+---
+
+## D-011 — `v4l` Rust crate — узкое место capture (5× медленнее C)
+**Дата:** 2026-08-10 · **Статус:** Accepted (переход на прямой ioctl)
+
+**Контекст:** Применили drop-old capture policy (`try_send` вместо
+`blocking_send`), ожидая роста throughput с 21 до ~90 FPS. A/B тест
+(pipeline vs sequential) показал: **ускорения нет** — capture остался на
+~21 FPS. Сравнение с `v4l2-ctl` (C, libv4l2) выявило: те же V4L2 ioctls
+дают **100 FPS** в C и **21 FPS** в Rust через `v4l 0.14` crate.
+
+**Причина:** абстракция `v4l::MMapStream::next()` добавляет ~20ms latency
+на кадр по сравнению с прямым `VIDIOC_DQBUF`. Возможные источники: лишнее
+копирование, неэффективный poll/select, отсутствие memory-mapping
+optimizations, которые libv4l2 делает автоматически.
+
+**Решение:** заменить `v4l` crate на прямой V4L2 ioctl через `nix` crate.
+Это ~150 строк unsafe FFI, но даёт прямой доступ к mmap-buffers без
+abstraction overhead. Ожидаемый результат: capture 21 FPS → 90-100 FPS.
+
+**Последствия:**
+- (+) Capture latency p50: ~22ms → ~10ms (чистый V4L2 dequeue).
+- (+) Sustained FPS: 21 → ~90 (камерный потолок), end-to-end ~34 FPS (NPU-лимит).
+- (−) `unsafe` FFI код — нужно аккуратное тестирование.
+- (−) Платформо-зависимо (Linux only), но это и так ограничение V4L2.
+- (!) `v4l` crate остаётся как fallback для non-Linux; прямой ioctl —
+  основная реализация для production.
