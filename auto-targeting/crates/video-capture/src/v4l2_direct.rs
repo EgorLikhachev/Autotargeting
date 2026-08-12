@@ -304,6 +304,8 @@ fn run_direct_capture(
     unsafe { ioctl(fd, VIDIOC_S_FMT, &mut fmt)? };
     let neg_w = fmt.pix.width;
     let neg_h = fmt.pix.height;
+    eprintln!("[v4l2-direct] S_FMT result: {}x{} pixfmt=0x{:x} sizeimage={}",
+        neg_w, neg_h, fmt.pix.pixelformat, fmt.pix.sizeimage);
     info!(width = neg_w, height = neg_h, "V4L2 direct format negotiated");
 
     // 3. Set frame rate (VIDIOC_S_PARM).
@@ -336,6 +338,7 @@ fn run_direct_capture(
         unsafe { ioctl(fd, VIDIOC_QUERYBUF, &mut buf)? };
         let len = buf.length as usize;
         let offset = buf.m_offset as usize;
+        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: length={} offset={}", i, len, offset);
         let ptr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
