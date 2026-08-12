@@ -77,13 +77,15 @@ struct V4l2PixFormat {
 }
 // 12 × 4 = 48 bytes ✓
 
-/// v4l2_format (208 bytes) — type(4) + union(204). We pad the union to 204
-/// bytes so total = 208 (matches kernel sizeof).
+/// v4l2_format (208 bytes). The kernel's `union fmt` has 8-byte alignment
+/// (because v4l2_window contains a pointer), so there's 4 bytes of PADDING
+/// between `type` (u32) and the union. Total = 4 + 4(pad) + 200(union) = 208.
 #[repr(C)]
 struct V4l2Format {
-    typ: u32,          // 4
-    pix: V4l2PixFormat, // 48
-    _pad: [u8; 156],   // 204 - 48 = 156 → total = 4 + 48 + 156 = 208 ✓
+    typ: u32,                  // offset 0-3
+    _pad0: u32,                // offset 4-7 (kernel padding for 8-byte aligned union)
+    pix: V4l2PixFormat,        // offset 8-55 (first 48 bytes of the 200-byte union)
+    _pad: [u8; 152],           // offset 56-207 (rest of union: 200-48=152)
 }
 
 /// v4l2_requestbuffers (20 bytes).
@@ -285,6 +287,7 @@ fn run_direct_capture(
     // 2. Set format (VIDIOC_S_FMT).
     let mut fmt = V4l2Format {
         typ: V4L2_BUF_TYPE_VIDEO_CAPTURE,
+        _pad0: 0,
         pix: V4l2PixFormat {
             width,
             height,
@@ -299,7 +302,7 @@ fn run_direct_capture(
             quantization: 0,
             xfer_func: 0,
         },
-        _pad: [0u8; 156],
+        _pad: [0u8; 152],
     };
     unsafe { ioctl(fd, VIDIOC_S_FMT, &mut fmt)? };
     let neg_w = fmt.pix.width;
