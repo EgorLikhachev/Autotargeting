@@ -360,8 +360,9 @@ fn run_direct_capture(
             )
         };
         if ptr == libc::MAP_FAILED {
+            let err = std::io::Error::last_os_error();
             return Err(VideoCaptureError::DeviceConfig(format!(
-                "mmap buffer {i} failed"
+                "mmap buffer {i} failed: len={len} offset={offset} fd={fd} err={err}"
             )));
         }
         mapped.push(MappedBuffer { ptr, length: len });
