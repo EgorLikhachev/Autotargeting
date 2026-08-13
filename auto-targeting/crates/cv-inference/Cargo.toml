@@ -57,6 +57,8 @@ serde_json = { workspace = true }
 video-capture = { workspace = true }
 cv-visualizer = { workspace = true }
 system-telemetry = { workspace = true }
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [[bench]]
 name = "nms"
