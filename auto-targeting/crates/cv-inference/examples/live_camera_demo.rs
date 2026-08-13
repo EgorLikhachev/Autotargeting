@@ -81,45 +81,13 @@ fn main() -> anyhow::Result<()> {
     // Telemetry file.
     let telemetry_path = args.output.join("telemetry.jsonl");
 
-    // Build V4L2 capture source.
-    // We can't use V4l2DirectSource from here (different feature gates),
-    // so we'll use a raw V4L2 capture thread inline.
-    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<Frame>(4);
-
-    let dev = args.device.clone();
-    let w = args.width;
-    let h = args.height;
-    let fps_val = args.fps;
-    std::thread::spawn(move || {
-        // Use v4l crate for simplicity in this demo.
-        // In production, v4l2-direct gives 1.5x better throughput.
-        use video_capture::{VideoSource, V4l2Source};
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let mut src = V4l2Source::new(&dev, w, h, fps_val)
-                .with_format(PixelFormat::Mjpeg);
-            match src.start().await {
-                Ok(mut rx) => {
-                    while let Some(frame) = rx.recv().await {
-                        if frame_tx.try_send(frame).is_err() {
-                            break; // consumer dropped
-                        }
-                    }
-                }
-                Err(e) => eprintln!("[!] V4L2 source error: {e}"),
-            }
-            let _ = src.stop().await;
-        });
-    });
-
-    // Connect to rknn-bridge.
-    println!("[*] Connecting to rknn-bridge...");
     #[cfg(unix)]
     {
         run_live_demo(args, writer, telemetry_path)?;
     }
     #[cfg(not(unix))]
     {
+        let _ = (writer, telemetry_path);
         eprintln!("Live camera demo requires Unix (for UnixStream + V4L2). Not available on this platform.");
     }
     Ok(())
@@ -133,6 +101,36 @@ fn run_live_demo(
 ) -> anyhow::Result<()> {
     use std::os::unix::net::UnixStream;
     use std::io::{Read, Write};
+
+    // Build V4L2 capture source.
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<Frame>(4);
+
+    let dev = args.device.clone();
+    let w = args.width;
+    let h = args.height;
+    let fps_val = args.fps;
+    std::thread::spawn(move || {
+        use video_capture::{VideoSource, V4l2Source};
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let mut src = V4l2Source::new(&dev, w, h, fps_val)
+                .with_format(PixelFormat::Mjpeg);
+            match src.start().await {
+                Ok(mut rx) => {
+                    while let Some(frame) = rx.recv().await {
+                        if frame_tx.try_send(frame).is_err() {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => eprintln!("[!] V4L2 source error: {e}"),
+            }
+            let _ = src.stop().await;
+        });
+    });
+
+    // Connect to rknn-bridge.
+    println!("[*] Connecting to rknn-bridge...");
     let mut sock = UnixStream::connect("/tmp/rknn-bridge.sock")?;
 
     // INIT
