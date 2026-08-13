@@ -312,10 +312,9 @@ fn run_direct_capture(
     let buf_size = if fmt.pix.sizeimage > 0 {
         fmt.pix.sizeimage as usize
     } else {
-        (neg_w as usize * neg_h as usize * 3).max(1024) // fallback estimate
+        (neg_w as usize * neg_h as usize * 3).max(1024)
     };
-    eprintln!("[v4l2-direct] S_FMT: {}x{} pixfmt=0x{:x} buf_size={}",
-        neg_w, neg_h, fmt.pix.pixelformat, buf_size);
+    debug!(width = neg_w, height = neg_h, buf_size, "V4L2 direct format negotiated");
     info!(width = neg_w, height = neg_h, "V4L2 direct format negotiated");
 
     // 3. Set frame rate (VIDIOC_S_PARM).
@@ -341,27 +340,24 @@ fn run_direct_capture(
     debug!(buffers = n_bufs, "V4L2 direct buffers allocated");
 
     // 5. Query + mmap each buffer, then queue.
-    // Use raw byte buffers to eliminate any struct layout ambiguity.
+    // Use raw byte buffers to eliminate struct layout ambiguity.
+    // Field offsets verified via C offsetof() on Orange Pi 5 (aarch64, kernel 6.1):
+    //   offset 0: index, offset 4: type, offset 8: bytesused, offset 12: flags,
+    //   offset 16: field, offset 60: memory, offset 64: m.offset, offset 72: length.
+    // NOTE: v4l2_buffer.timestamp uses kernel timeval which is 12 bytes on this
+    // platform (not 16 as glibc timeval), so all fields after field(16) are shifted.
     let mut mapped: Vec<MappedBuffer> = Vec::with_capacity(n_bufs as usize);
     for i in 0..n_bufs {
-        let mut buf = [0u8; 88]; // sizeof(v4l2_buffer) = 88
-        // Set fields by offset (verified against kernel struct on aarch64 64-bit):
-        //   offset 0: index (u32)
-        //   offset 4: type (u32) = V4L2_BUF_TYPE_VIDEO_CAPTURE
-        //   offset 68: memory (u32) = V4L2_MEMORY_MMAP
+        let mut buf = [0u8; 88];
         buf[0..4].copy_from_slice(&i.to_ne_bytes());
         buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
-        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        buf[60..64].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
         unsafe { ioctl_raw(fd, VIDIOC_QUERYBUF, buf.as_mut_ptr())? };
 
-        // Read results by offset:
-        //   offset 72: m.offset (u32) — MMAP buffer offset
-        //   offset 80: length (u32) — buffer length
-        let offset = u32::from_ne_bytes([buf[72], buf[73], buf[74], buf[75]]) as usize;
-        let length = u32::from_ne_bytes([buf[80], buf[81], buf[82], buf[83]]) as usize;
-        // Some drivers return length=0 in QUERYBUF; use sizeimage as fallback.
+        let offset = u32::from_ne_bytes([buf[64], buf[65], buf[66], buf[67]]) as usize;
+        let length = u32::from_ne_bytes([buf[72], buf[73], buf[74], buf[75]]) as usize;
         let mmap_len = if length > 0 { length } else { buf_size };
-        eprintln!("[v4l2-direct] QUERYBUF buf[{}]: offset={} length={} mmap_len={}", i, offset, length, mmap_len);
+        debug!(buf_idx = i, offset, length, mmap_len, "QUERYBUF");
 
         let ptr = unsafe {
             libc::mmap(
@@ -381,9 +377,9 @@ fn run_direct_capture(
         }
         mapped.push(MappedBuffer { ptr, length: mmap_len });
 
-        // Queue this buffer (VIDIOC_QBUF) — same raw buffer, re-set type/memory.
+        // Queue this buffer (VIDIOC_QBUF).
         buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
-        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        buf[60..64].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
         unsafe { ioctl_raw(fd, VIDIOC_QBUF, buf.as_mut_ptr())? };
     }
 
@@ -402,7 +398,7 @@ fn run_direct_capture(
         // Dequeue (VIDIOC_DQBUF) — hot path, raw buffer.
         let mut buf = [0u8; 88];
         buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
-        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        buf[60..64].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
         match unsafe { ioctl_raw(fd, VIDIOC_DQBUF, buf.as_mut_ptr()) } {
             Ok(()) => {}
             Err(e) => {
@@ -426,7 +422,7 @@ fn run_direct_capture(
 
         // Re-queue the buffer immediately.
         buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
-        buf[68..72].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
+        buf[60..64].copy_from_slice(&V4L2_MEMORY_MMAP.to_ne_bytes());
         unsafe {
             let _ = ioctl_raw(fd, VIDIOC_QBUF, buf.as_mut_ptr());
         }
