@@ -2,6 +2,7 @@
 upload/
 tool-results/
 download/
+.zcode/
 
 # Environment files may contain secrets
 .env
@@ -11,3 +12,54 @@ download/
 # Original ignores
 skills/
 node_modules/
+
+# ---- Rust ----
+# Build artifacts (target/ lives at auto-targeting/target)
+**/target/
+target/
+**/*.rs.bk
+Cargo.lock.bak
+# Perf/profile output
+perf.data*
+flamegraph.svg
+
+# ---- C++ (rknn-bridge) ----
+rknn-bridge/build/
+**/build/
+*.o
+*.obj
+*.so
+*.dylib
+*.a
+# Keep librknnrt.so out — it is Rockchip-proprietary, not redistributable here.
+librknnrt.so
+
+# ---- Python (rknn-toolkit2 conversion scripts, venv) ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+
+# ---- Runtime output (frames, videos, logs, telemetry dumps) ----
+output/
+*.mp4
+*.jpg
+!docs/**/*.jpg
+!auto-targeting/docs/**/*.jpg
+# Sample demo artifacts in repo root are committed explicitly when intended.
+
+# ---- Editor / IDE ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---- Coverage ----
+*.tarpaulin-coverage-report/
+coverage/
