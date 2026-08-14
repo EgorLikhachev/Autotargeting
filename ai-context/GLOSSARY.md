@@ -16,7 +16,7 @@
 | **NED** | North-East-Down — система координат автопилота. |
 | **ROI** | Region of Interest — куда направить камеру/гимбал (`MAV_CMD_DO_SET_ROI`). |
 | **RTH** | Return-To-Home — возврат домой (режим ArduPilot). |
-| **V4L2** | Video4Linux2 — API захвата кадров. |
+| **V4L2** | Video4Linux2 — API захвата кадров (ioctls `VIDIOC_DQBUF`/`QBUF`/`S_FMT`). |
 | **NV12 / YUYV / MJPEG** | пиксельные форматы (YUV 4:2:0 semi-planar / YUV 4:2:2 packed / JPEG). |
 | **dmabuf / SCM_RIGHTS** | механизмы zero-copy передачи кадра (план Phase 6). |
 | **Anti-loop** | защита от осцилляций автопилота (7 слоёв: watchdogs, deadband, rate-limiter, oscillation detector, RC override, systemd). |
@@ -28,3 +28,5 @@
 | **Zero-copy API** | `rknn_create_mem` + `rknn_set_io_mem` — NPU пишет прямо в наш буфер, без копий. |
 | **SDD** | Spec-Driven Development — разработка через спецификацию (`docs/SDD-SPEC.md`). |
 | **COCO** | Common Objects in Context — датасет 80 классов (person, car, bus...). Базовая модель обучена на нём. |
+| **V4l2DirectSource** | capture-backend через прямой `libc` ioctl (feature `v4l2-direct`), в обход `v4l` crate. 32 FPS vs 21 FPS. |
+| **Drop-old / drop-new** | capture policy: при переполненном канале дропается кадр, capture не блокируется (D-010). `try_send` вместо `blocking_send`. |

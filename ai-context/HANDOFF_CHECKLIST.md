@@ -9,7 +9,7 @@
 
 ```
 Ты продолжаешь работу над проектом Auto-Targeting — бортовая система CV для
-коптера на RK3588. Ниже — контекст проекта (папка ai-context/).
+самолёта (fixed-wing UAV) на RK3588. Ниже — контекст проекта (папка ai-context/).
 
 Прочитай:
 1. ai-context/PROJECT_OVERVIEW.md — что это
@@ -19,8 +19,9 @@
 
 Задача: <опиши, что нужно сделать>
 
-Полная спека: auto-targeting/docs/SDD-SPEC.md (920 строк).
+Полная спека: auto-targeting/docs/SDD-SPEC.md.
 Доступ к SoC: ssh orangepi@192.168.0.139 (ключ в ~/.ssh/id_ed25519).
+Доступ к репо: https://github.com/EgorLikhachev/Autotargeting (ветка main).
 ```
 
 ## Чек-лист перед handoff
@@ -30,7 +31,7 @@
 - [ ] Новые решения зафиксированы в `auto-targeting/docs/sdd/decisions.md`
 - [ ] `progress.json` обновлён (`auto-targeting/docs/sdd/progress.json`)
 - [ ] Незакоммиченных изменений нет (`git status` чистый)
-- [ ] Код собирается (`cargo check`)
+- [ ] Код собирается (`cargo check` из `auto-targeting/`)
 
 ## Что НЕ нужно передавать
 
@@ -41,6 +42,7 @@
 
 ## Версия
 
-**Дата:** 2026-08-10
-**Тег:** `v0.1.0-phase-1.1`
-**Phase:** 1.1 закрыта, следующий — задача 1.2 (свой датасет + fine-tune)
+**Дата:** 2026-08-14
+**Ветка:** `main` @ `33028e6`
+**Phase:** 1.1 закрыта + hardware-validated + репозиторий оформлен по OSS-конвенциям.
+Следующий — задача 1.2 (свой датасет + fine-tune + подключить V4l2DirectSource в live-demo).

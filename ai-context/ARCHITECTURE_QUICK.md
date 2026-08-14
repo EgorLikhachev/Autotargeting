@@ -4,7 +4,7 @@
 
 ```mermaid
 flowchart LR
-    CAM["📹 video-capture<br/>(V4L2 / Synthetic / Replay)"]
+    CAM["📹 video-capture<br/>(V4L2 v4l / V4L2-direct / Synthetic / Replay)"]
     INF["🧠 cv-inference<br/>(RKNN bridge / ONNX / Mock)"]
     TRK["🎯 target-tracker<br/>(KalmanFilter2D + Hungarian)"]
     CMD["⚙️ commander<br/>(FSM + anti-loop + PID)"]
@@ -25,7 +25,7 @@ flowchart LR
 | Крейт | Ответственность |
 |---|---|
 | `common` | доменные типы, ошибки, TOML-конфиг, сценарии |
-| `video-capture` | `VideoSource` trait + 3 реализации + конвертация пикселей |
+| `video-capture` | `VideoSource` trait + 4 реализации (Synthetic/Replay/V4l2 `v4l`/V4l2Direct `v4l2-direct`) + конвертация пикселей |
 | `yolov8` | letterbox + postprocess (чистая логика, без ONNX/RKNN) |
 | `cv-inference` | `InferenceBackend` trait + Mock + ONNX (cpu-onnx) + RknnBridgeClient (unix) |
 | `cv-visualizer` | headless bbox/labels → JPEG + JSONL |
@@ -77,3 +77,14 @@ async fn connect() / disconnect() -> Result<()>
 ## IPC C++↔Rust
 
 Unix domain socket + length-prefixed JSON (canonical big-endian). 4 пары сообщений: `init/infer/health/shutdown` (+ `_ack`). Кадр — inline как base64 (zero-copy SHM — TODO Phase 6).
+
+## Захват камеры: два backend'а
+
+| Backend | Feature | Реализация | Throughput |
+|---|---|---|---|
+| `V4l2Source` | `v4l2` | через `v4l` crate (MMAP stream) | ~21 FPS (узкое место) |
+| `V4l2DirectSource` | `v4l2-direct` | прямой `libc` ioctl (VIDIOC_DQBUF/QBUF), сырые `[u8;88]` буферы | **32 FPS** (рекомендуемый) |
+
+Capture policy — **drop-new** (`try_send`): при full-канале дропается новый кадр,
+capture-поток никогда не блокируется (D-010). Для realtime-видео это даёт
+consumer'у свежий кадр, как только он готов.

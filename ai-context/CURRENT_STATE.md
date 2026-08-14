@@ -1,18 +1,19 @@
 # Current State — готовность по модулям
 
-**Дата:** 2026-08-10 · **Ветка:** `main` @ `v0.1.0-phase-1.1`
+**Дата:** 2026-08-14 · **Ветка:** `main` @ `33028e6` (после repo-formatting)
 
 ## Готовность (✅ = работает, 🟡 = stub/частично, 🔴 = не начато)
 
-### Phase 1.1 (минимальный контур CV) — ✅ ЗАКРЫТА
+### Phase 1.1 (минимальный контур CV) — ✅ ЗАКРЫТА + hardware-validated
 
 | Компонент | Статус | Детали |
 |---|---|---|
-| Единый модуль изображений (`VideoSource`) | ✅ | SyntheticVideoSource + ReplaySource + V4l2Source (feature `v4l2`) |
+| Единый модуль изображений (`VideoSource`) | ✅ | Synthetic + Replay + V4l2Source (`v4l2`) + **V4l2DirectSource (`v4l2-direct`, прямой ioctl, 32 FPS)** |
 | Инференс ONNX Runtime (x86 dev) | ✅ | `cv-inference` feature `cpu-onnx` (ort 2.0-rc.13) |
-| Инференс RKNN NPU (RK3588) | ✅ | `rknn-bridge` C++, zero-copy + sigmoid, 32ms latency |
+| Инференс RKNN NPU (RK3588) | ✅ | `rknn-bridge` C++, zero-copy + sigmoid, 27–29 ms |
 | Парсер YOLOv8 (letterbox + postprocess + NMS) | ✅ | `yolov8` крейт, зеркало в C++ |
-| End-to-end детекции на NPU | ✅ | 1342 person detections на bus.jpg, conf=0.50 |
+| End-to-end детекции на NPU | ✅ | person/bus на bus.jpg через C++ bridge |
+| **Live camera demo (камера → NPU → видео)** | ✅ | `examples/live_camera_demo.rs`, 5171 детекция, аннотированный MP4 |
 | Headless визуализатор | ✅ | `cv-visualizer` (bbox/labels/JPEG/JSONL) |
 | Телеметрия | ✅ | `system-telemetry` (RSS, CPU/NPU temp, FPS/latency) |
 | Soak-тест 30 мин | ✅ | `examples/soak.rs` + `scripts/soak_30min.sh` |
@@ -22,39 +23,45 @@
 
 | Метрика | Значение | KPI |
 |---|---|---|
-| NPU inference latency | 27–29 ms | < 60 ms ✅ |
-| Sustained FPS (client RT) | 17.1 | ≥ 15 ✅ |
+| NPU inference latency | **27–29 ms** | < 60 ms ✅ |
+| Sustained FPS (NPU only) | **~34 FPS** | ≥ 15 ✅ |
 | Bridge VmRSS (idle) | 5.7 MB | < 50 MB ✅ |
-| NPU temp (idle) | 43.4 °C | observation |
+| CPU temp (под нагрузкой) | 45.3 °C | < 70 °C ✅ |
+| **NPU temp (под нагрузкой)** | **44.4 °C** | < 85 °C ✅ |
 | init latency (валидная модель) | 32–39 ms | — |
+| V4L2 capture throughput (`v4l2-direct`) | **32 FPS** (vs 21 у `v4l` crate) | — |
+
+Полные таблицы — `auto-targeting/docs/HARDWARE_TEST_RESULTS.md` (§2 метрики, §8 live demo).
 
 ### Остальное (по фазам ROADMAP)
 
 | Компонент | Статус | Фаза |
 |---|---|---|
-| Трекер целей (Kalman + Hungarian) | ✅ | Phase 3 |
-| State machine (9 состояний) + anti-loop (7 слоёв) | ✅ | Phase 5 |
-| FC-адаптеры (Mock/SITL/ArduPilot MAVLink) | ✅ | Phase 4 |
+| Трекер целей (Kalman + Hungarian) | 🟡 scaffold | Phase 1.2 / 3 |
+| State machine + anti-loop (7 слоёв) | ✅ | Phase 5 |
+| FC-адаптеры (Mock / SITL) | ✅ | Phase 4 |
+| FC-адаптер ArduPilot MAVLink (real FC) | 🟡 stub | Phase 4 |
 | CLI + REPL (15 команд) | ✅ | Phase 5 |
-| Конфигурация (TOML + env override) | ✅ | Phase 0 |
-| CI/CD (6 jobs + nightly) | ✅ | Phase 0 |
-| Тесты: 356 unit + 5 criterion + 5 SITL-сценариев | ✅ | — |
+| Конфигурация (TOML + `AT_` env override) | ✅ | Phase 0 |
+| CI/CD (CI + Nightly + docs workflow) | ✅ | Phase 0 |
+| **Репозиторий оформлен (README/LICENSE/CONTRIBUTING/CHANGELOG/CoC/SECURITY/SUPPORT/issue-templates)** | ✅ | — |
+| Тесты: **294 unit (lib, aarch64)** + 6 C++ NMS + criterion + SITL-сценарии | ✅ | — |
 | **`run_full()`** (связать видео+инференс+FC в runtime) | 🟡 stub | Phase 5/6 |
 | **Свой датасет + fine-tune** | 🔴 | Phase 1.2 |
-| **Реальная камера USB/MIPI** | 🟡 V4L2 реализован, не тестировался на стенде | Phase 1 |
 | **Замкнутая петля CV→автопилот** | 🔴 главный риск | Phase 6+ |
 | HITL / Flight tests | 🔴 | Phase 7–8 |
 
-## 5 известных TODO (из аудита, P1/P2)
+## Известные TODO (из аудита + тестирования на железе)
 
-1. **Endianness length-prefix** — ✅ fixed (D-002)
-2. **SCM_RIGHTS не реализован** — 🟡 inline-base64 работает, zero-copy SHM — TODO P1
-3. **Crude coordinate transform в commander** — 🟡 TODO P1
-4. **Упрощённый Kalman (fixed-gain)** — 🟡 TODO P2
-5. **`select_target` без lock_confirmation** — 🟡 TODO P2
-
-Дополнительно из тестирования на железе:
-6. **Rust `yolov8::postprocess` sigmoid sync** — TODO P2 (CPU-путь ждёт post-sigmoid, NPU-путь уже починен)
-7. **NMS tuning** — 1342 → ~10 детекций (TODO P2)
+| # | TODO | Приоритет | Статус |
+|---|---|---|---|
+| 1 | Endianness length-prefix (C++↔Rust) | P0 | ✅ fixed (D-002) |
+| 2 | SCM_RIGHTS / zero-copy SHM для кадра | P1 | 🟡 inline-base64 работает |
+| 3 | Crude coordinate transform в commander | P1 | Open |
+| 4 | Упрощённый Kalman (fixed-gain) | P2 | Open |
+| 5 | `select_target` без lock_confirmation | P2 | Open |
+| 6 | Rust yolov8::postprocess нет sigmoid (только CPU-путь) | P2 | Open (NPU-путь уже починен) |
+| 7 | NMS tuning — избыточные детекции (5171 за 15с) | P2 | Open |
+| 8 | Подключить `V4l2DirectSource` в `live_camera_demo` (5→~450 кадров за 15с) | P1 | Open (модуль готов) |
 
 См. [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) для деталей.

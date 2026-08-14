@@ -22,10 +22,14 @@
 
 ## Правила коммитов
 
-- **Conventional Commits**: `feat(...):`, `fix(...):`, `docs(...):`, `chore(...):`, `refactor(...):`
+Полная конвенция — в `CONTRIBUTING.md` (git-root). Кратко:
+- **Conventional Commits**: `feat(...):`, `fix(...):`, `docs(...):`, `chore(...)`, `perf(...)`, `refactor(...)`
+- Скоупы — имена крейтов: `common`, `video-capture`, `cv-inference`, `yolov8`, `rknn`, `hw`, `ci`, `deps`...
 - Каждый коммит — с подробным body (что, зачем, какой критерий закрывает)
+- Branch off `main`, имя ветки `<type>/<scope>-<topic>`
 - Не переписывай историю без явного разрешения пользователя
 - Коммить и пушь только по явной просьбе пользователя
+- Safety-critical изменения (`commander/`, `fc-adapter/`, `target-tracker/`, watchdogs) — требуют 2 аппрува + тесты state-machine/oscillation
 
 ## Платформа и сборка
 
@@ -50,7 +54,8 @@
 ## Первый шаг нового агента
 
 1. Прочитай эту папку (`ai-context/`) целиком
-2. Прочитай `auto-targeting/docs/SDD-SPEC.md` (если нужен глубокий контекст)
-3. Проверь `git log --oneline -10` — актуальная история
-4. Спроси пользователя, что делать дальше
-5. Перед любым изменением — убедись, что понимаешь anti-loop политику
+2. Прочитай git-root `README.md` (quickstart, конфиг) + `CONTRIBUTING.md` (конвенции)
+3. Прочитай `auto-targeting/docs/SDD-SPEC.md` (если нужен глубокий контекст)
+4. Проверь `git log --oneline -10` — актуальная история
+5. Спроси пользователя, что делать дальше
+6. Перед любым изменением — убедись, что понимаешь anti-loop политику

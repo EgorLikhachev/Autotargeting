@@ -32,14 +32,18 @@
 
 ## Связь с полными документами
 
-Эта папка — **выжимка**. Полные версии:
-- `auto-targeting/docs/SDD-SPEC.md` — 920-строчная спецификация (единственный источник истины)
+Эта папка — **выжимка**. Полные версии (пути от git-root):
+- `README.md` (git-root) — канонический front-door: бейджи, quickstart, конфиг
+- `CONTRIBUTING.md` / `CHANGELOG.md` / `SECURITY.md` (git-root) — OSS-конвенции
+- `auto-targeting/docs/SDD-SPEC.md` — спецификация (единственный источник истины)
+- `auto-targeting/docs/PROJECT_REPORT.md` — полный отчёт о проделанной работе
 - `auto-targeting/docs/HARDWARE_TEST_RESULTS.md` — результаты тестирования на RK3588
-- `auto-targeting/docs/sdd/decisions.md` — журнал архитектурных решений (D-001…D-010)
+- `auto-targeting/docs/sdd/decisions.md` — журнал архитектурных решений (D-001…D-011)
 - `auto-targeting/docs/sdd/progress.json` — трекер этапов (machine-readable)
 
 ## Версия контекста
 
-**Дата генерации:** 2026-08-10
-**Ветка:** `feature/phase-1.1-cv-loop` → merged to `main` as `v0.1.0-phase-1.1`
-**Phase:** 1.1 закрыта (minimal CV loop работает end-to-end на NPU)
+**Дата генерации:** 2026-08-14
+**Ветка:** `main` @ `33028e6`
+**Phase:** 1.1 закрыта (minimal CV loop работает end-to-end на NPU, validated на железе).
+Репозиторий оформлен по OSS-конвенциям (README/LICENSE/CONTRIBUTING/CHANGELOG на git-root).

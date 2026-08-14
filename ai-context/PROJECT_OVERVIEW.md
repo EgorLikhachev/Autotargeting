@@ -2,9 +2,11 @@
 
 ## Что это
 
-**Auto-Targeting System** — бортовая система компьютерного зрения для коптера:
-получает кадры с камеры → распознаёт объекты → сопровождает выбранную цель →
-управляет автопилотом для её удержания в кадре.
+**Auto-Targeting System** — бортовая система компьютерного зрения для
+**самолёта (fixed-wing UAV)**: получает кадры с камеры → распознаёт объекты →
+сопровождает выбранную цель → управляет автопилотом для её удержания в кадре.
+Всё за многоуровневой защитой от осцилляций (state machine, watchdogs, deadband,
+oscillation detector).
 
 **Целевая платформа:** Orange Pi 5 (RK3588, 8× Cortex-A55 + NPU 6 TOPS),
 ArduPilot FC, USB/MIPI камера.
@@ -16,17 +18,19 @@ ArduPilot FC, USB/MIPI камера.
 - **Python** — конвертация моделей (rknn-toolkit2), калибровка
 - **MAVLink v2** — связь с автопилотом
 - **TOML + figment** — конфигурация (env-override через `AT_` префикс)
-- **CI/CD:** GitHub Actions (fmt/clippy/test/coverage/cross-compile aarch64/QEMU/SITL Docker)
+- **CI/CD:** GitHub Actions (fmt/clippy/test/coverage/cross-compile aarch64/QEMU/SITL Docker + docs lint)
 
 ## Текущая фаза
 
-**Phase 1.1 (минимальный контур CV) — ЗАКРЫТА** (v0.1.0-phase-1.1).
+**Phase 1.1 (минимальный контур CV) — ЗАКРЫТА и hardware-validated**
+(`v0.1.0-phase-1.1`, после чего — оформление репозитория на `main`).
 
-Полный пайплайн работает на реальном NPU:
+Полный пайплайн работает на реальном NPU и проверен live:
 - `rknn_init` за 32–39 ms
 - NPU-инференс за **27–29 ms** (~34 FPS)
-- Эталон даёт **47 детекций** на bus.jpg (class=person, class=bus)
-- C++ bridge через zero-copy API + sigmoid → **1342 детекции person** на bus.jpg
+- Эталон даёт детекции на bus.jpg (class=person, class=bus)
+- **Live camera demo** (2026-08-13): камера → NPU → аннотированное видео,
+  5171 детекция, CPU/NPU temp 45.3/44.4 °C
 
 ## Что НЕ входит (границы Phase 1.1)
 
@@ -38,6 +42,7 @@ ArduPilot FC, USB/MIPI камера.
 ## Следующий этап
 
 **Задача 1.2** — свой датасет (палатка/ящик/бензовоз/джип) + fine-tune YOLOv8n +
-реальная камера (USB/MIPI) + интеграция full-loop (`run_full()` сейчас stub).
+подключить `V4l2DirectSource` в live-demo (модуль готов) + интеграция full-loop
+(`run_full()` сейчас stub).
 
 См. [`CURRENT_STATE.md`](CURRENT_STATE.md) для деталей готовности по модулям.
