@@ -1,0 +1,47 @@
+# EditorConfig — https://editorconfig.org
+# Keeps indentation, line endings, and charset consistent across editors.
+# Mirrors the project's rustfmt.toml (4-space indent, Unix LF, 100-col width).
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+# Rust — matches rustfmt.toml exactly.
+[*.rs]
+indent_size = 4
+
+# TOML config files (Cargo.toml, config.example.toml).
+[*.toml]
+indent_size = 4
+
+# C++ for the rknn-bridge microservice.
+[*.{cpp,hpp,h,c,cc}]
+indent_size = 4
+
+# Python scripts (scripts/*.py).
+[*.py]
+indent_size = 4
+
+# YAML (CI workflows, docker-compose).
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown — trailing whitespace can be significant (hard line breaks),
+# so do not strip it. Lines wrap naturally.
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# Makefiles and shell scripts need tabs.
+[{Makefile,makefile,GNUmakefile,*.mk}]
+indent_style = tab
+
+[*.sh]
+indent_size = 2

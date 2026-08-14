@@ -1,0 +1,23 @@
+{
+  // markdownlint-cli2 configuration for the Auto-Targeting repository.
+  // Docs wrap naturally; we don't enforce a hard line length on prose.
+  "config": {
+    "default": true,
+    // Long lines are normal in prose / tables / fenced commands.
+    "MD013": false,
+    // Allow inline HTML (badges, <details>, <sub>) — used in README/issue templates.
+    "MD033": false,
+    // First line as heading is fine; we use top-level # titles.
+    "MD041": false,
+    // Allow multiple top-level headings (README has section anchors).
+    "MD025": { "siblings_only": true },
+    // Code block language is recommended but not required (shell blocks vary).
+    "MD040": false
+  },
+  "ignores": [
+    "**/target/**",
+    "**/build/**",
+    "**/.venv/**",
+    "CHANGELOG.md"
+  ]
+}
