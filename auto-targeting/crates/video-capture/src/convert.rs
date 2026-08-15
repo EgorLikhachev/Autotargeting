@@ -126,14 +126,17 @@ pub fn yuyv_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
         }
     }
 
-    // UV plane: for each 2x2 block, take U and V from the first YUYV pair
+    // UV plane: for each 2x2 block, take U and V from the first YUYV pair.
+    // Нечётные w/h нестандартны для YUYV/NV12: читаем хрому через get()
+    // (нейтральный 128 при выходе за границы), непарная последняя строка
+    // пропускается.
     let uv_offset = w * h;
-    for y in (0..h).step_by(2) {
+    for y in (0..h.saturating_sub(1)).step_by(2) {
         for x in (0..w).step_by(2) {
             // Take U, V from pixel (x, y)
             let yuyv_idx = (y * w + x) * 2;
-            let u = frame.data[yuyv_idx + 1];
-            let v = frame.data[yuyv_idx + 3];
+            let u = frame.data.get(yuyv_idx + 1).copied().unwrap_or(128);
+            let v = frame.data.get(yuyv_idx + 3).copied().unwrap_or(128);
 
             let uv_idx = uv_offset + (y / 2) * w + x;
             nv12[uv_idx] = u;
@@ -177,17 +180,38 @@ pub fn yuyv_to_rgb24(frame: &Frame) -> ConversionResult<Frame> {
 
     let mut rgb = vec![0u8; w * h * 3];
 
+    // YUYV packed: [Y0, U, Y1, V] — 4 байта на пару пикселей.
+    // Читаем строго парами: это даёт правильную хрому для обоих пикселей
+    // и не выходит за границы на последней паре (макс. индекс = 2wh-1).
     for y in 0..h {
-        for x in 0..w {
-            let yuyv_idx = (y * w + x) * 2;
-            let y_val = frame.data[yuyv_idx] as f32;
-            // U, V общие для пары пикселей
-            let u_val = frame.data[yuyv_idx + 1] as f32 - 128.0;
-            let v_val = frame.data[yuyv_idx + 3] as f32 - 128.0;
+        let row = y * w;
+        let mut x = 0;
+        while x + 1 < w {
+            let base = (row + x) * 2;
+            let u_val = frame.data[base + 1] as f32 - 128.0;
+            let v_val = frame.data[base + 3] as f32 - 128.0;
 
+            let (r0, g0, b0) = ycbcr_to_rgb(frame.data[base] as f32, u_val, v_val);
+            let (r1, g1, b1) = ycbcr_to_rgb(frame.data[base + 2] as f32, u_val, v_val);
+
+            let rgb_idx = (row + x) * 3;
+            rgb[rgb_idx] = r0;
+            rgb[rgb_idx + 1] = g0;
+            rgb[rgb_idx + 2] = b0;
+            rgb[rgb_idx + 3] = r1;
+            rgb[rgb_idx + 4] = g1;
+            rgb[rgb_idx + 5] = b1;
+            x += 2;
+        }
+        // Нечётная ширина (нестандарт для YUYV): последний одиночный пиксель,
+        // хрому берём с запасом через get(), чтобы не выйти за границы.
+        if x < w {
+            let base = (row + x) * 2;
+            let y_val = frame.data[base] as f32;
+            let u_val = frame.data.get(base + 1).copied().unwrap_or(128) as f32 - 128.0;
+            let v_val = frame.data.get(base + 3).copied().unwrap_or(128) as f32 - 128.0;
             let (r, g, b) = ycbcr_to_rgb(y_val, u_val, v_val);
-
-            let rgb_idx = (y * w + x) * 3;
+            let rgb_idx = (row + x) * 3;
             rgb[rgb_idx] = r;
             rgb[rgb_idx + 1] = g;
             rgb[rgb_idx + 2] = b;
@@ -393,6 +417,46 @@ mod tests {
         let frame = make_frame(vec![0; 16], 4, 2, PixelFormat::Rgb24);
         let result = yuyv_to_nv12(&frame);
         assert!(result.is_err());
+    }
+
+    /// Regression: чтение V последней пары пикселей выходило за границы
+    /// (index 2wh+1 при len 2wh). Падало на PS Eye 320x240 (len=153600).
+    #[test]
+    fn yuyv_conversions_exact_size_no_panic() {
+        for (w, h) in [(320, 240), (640, 480), (4, 2)] {
+            let data: Vec<u8> = (0..w * h * 2).map(|i| (i % 251) as u8).collect();
+            let frame = make_frame(data, w as u32, h as u32, PixelFormat::Yuyv);
+
+            let rgb = yuyv_to_rgb24(&frame).unwrap();
+            assert_eq!(rgb.data.len(), w * h * 3);
+            assert_eq!(rgb.metadata.format, PixelFormat::Rgb24);
+
+            let nv12 = yuyv_to_nv12(&frame).unwrap();
+            assert_eq!(nv12.data.len(), w * h * 3 / 2);
+        }
+    }
+
+    /// YUYV хрома парная: оба пикселя пары должны получить одинаковые U/V.
+    /// Белый кадр (Y=255, U=V=128) → весь RGB = белый.
+    #[test]
+    fn yuyv_to_rgb24_paired_chroma() {
+        let (w, h) = (6, 4);
+        let mut data = vec![0u8; w * h * 2];
+        for pair in data.chunks_exact_mut(4) {
+            pair[0] = 255; // Y0
+            pair[1] = 128; // U
+            pair[2] = 255; // Y1
+            pair[3] = 128; // V
+        }
+        let frame = make_frame(data, w as u32, h as u32, PixelFormat::Yuyv);
+        let rgb = yuyv_to_rgb24(&frame).unwrap();
+        for px in rgb.data.chunks_exact(3) {
+            assert!(
+                (px[0] as i16 - px[1] as i16).abs() <= 2
+                    && (px[1] as i16 - px[2] as i16).abs() <= 2,
+                "expected neutral white, got {px:?}"
+            );
+        }
     }
 
     #[test]
