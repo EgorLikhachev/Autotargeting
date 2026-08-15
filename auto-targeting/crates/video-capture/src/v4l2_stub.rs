@@ -155,6 +155,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)] // /dev/null не существует на Windows — тест только для Unix-хостов
     fn device_exists_returns_true_for_dev_null() {
         assert!(device_exists("/dev/null"));
     }
