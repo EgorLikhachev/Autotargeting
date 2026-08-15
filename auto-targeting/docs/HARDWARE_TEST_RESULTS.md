@@ -396,3 +396,27 @@ ffmpeg -framerate 5 -i output/live/frames/frame_%04d.jpg \
    неточно по семантике).
 4. Подключить MIPI CSI камеру → убрать USB-bottleneck → расширить до
    `broadcast<Arc<Frame>>` для multi-consumer (см. D-011, SDD-SPEC §11).
+5. rknn-bridge: добавить connect/read таймауты — однопоточный сервер может
+   зависнуть на мёртвом клиентском сокете от аварийной сессии (найдено при
+   тесте PS Eye, лечится рестартом).
+
+---
+
+## 10. Альтернативная камера: Sony PS Eye (2026-08-15/16)
+
+Полный отчёт — [CAMERA_PS_EYE_TEST.md](CAMERA_PS_EYE_TEST.md). Кратко:
+
+- PS Eye (OV534+OV7721, **не-UVC**) не имела драйвера в вендорском ядре
+  (`CONFIG_USB_GSPCA_OV534 is not set`) → собран out-of-tree `gspca_ov534.ko`
+  из `orangepi-xunlong/linux-orangepi` (ветка `orange-pi-6.1-rk35xx`, точно
+  6.1.99), установлен персистентно. Ядро/NPU-стек не тронуты.
+- Форматы: YUYV/GRBG без сжатия; 640×480@60 и **320×240@187** — все целевые
+  частоты подтверждаются (v4l2-ctl: 60.02 / 184.61 FPS).
+- `v4l` crate на gspca **зависает** (start ок, recv — ни кадра) → только
+  `--backend direct`.
+- Rust (direct): total p50 **16.63 мс** @640×480@60 (=60 FPS),
+  **5.37 мс** @320×240@187 (=186 FPS) — конвейер успевает за камеру.
+- Live demo end-to-end: 84 кадра, 80 906 детекций, 15 с, inference avg 90 мс,
+  NPU 37.9 °C, `processed.mp4` собран.
+- По ходу теста исправлено 5 багов (S_PARM offsets, YUYV convert OOB,
+  pump-цикл demo и др.) — см. CHANGELOG [Unreleased].

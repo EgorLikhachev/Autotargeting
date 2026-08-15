@@ -156,6 +156,28 @@
         "Only 5 frames captured — v4l crate early-terminates capture loop (known issue, fix: switch to V4l2DirectSource feature v4l2-direct)"
       ],
       "report": "docs/HARDWARE_TEST_RESULTS.md §8"
+    },
+    {
+      "step": "H4",
+      "name": "Alternative camera test: Sony PS Eye (OV534+OV7721, non-UVC)",
+      "status": "completed",
+      "completed_at": "2026-08-16",
+      "device": "Orange Pi 5 + Sony PlayStation Eye (USB 2.0)",
+      "results": {
+        "driver": "vendor kernel lacks gspca_ov534 (all GSPCA subdrivers 'is not set'); built out-of-tree module from orangepi-xunlong/linux-orangepi orange-pi-6.1-rk35xx (exact 6.1.99), vermagic match, installed persistently (extra/ + modules-load.d)",
+        "formats": "YUYV + GRBG only (no MJPG); 640x480@60, 320x240@187/125/100/60",
+        "raw_throughput_v4l2ctl": "all target rates hit: 60.02 (640x480@60), 184.61 (320x240@187)",
+        "v4l_crate": "HANGS on gspca (start ok, recv never yields) — direct backend only",
+        "rust_sequential_p50": "640x480@60: capture 9.6ms + yuyv decode 7.0ms = 16.63ms total (=60fps); 320x240@187: 4.5+0.9=5.37ms (=186fps)",
+        "live_demo": "84 frames / 80906 detections / 15s, inference avg 90ms RT, RSS 20.6MB, NPU 37.9C, processed.mp4 1.7MB",
+        "bugs_fixed": [
+          "v4l2_direct.rs: undefined data_len -> bytesused.min(len) [a02b89a]",
+          "v4l2_direct.rs: S_PARM timeperframe offsets 4 bytes early -> camera stuck at 30fps [280c98e]",
+          "convert.rs: yuyv_to_rgb24/nv12 OOB on last pixel pair -> panic on first frame [ec10230]",
+          "live_camera_demo: pump loop broke on channel Full (not just Closed) -> capture died at frame 5; also explains Arducam '5 frames' mystery [a15e427]"
+        ]
+      },
+      "report": "docs/CAMERA_PS_EYE_TEST.md"
     }
   ]
 }

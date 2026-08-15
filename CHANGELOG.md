@@ -12,6 +12,14 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **Alternative camera validated: Sony PlayStation Eye** (OV534+OV7721,
+  non-UVC, YUYV-only) — out-of-tree `gspca_ov534` kernel module built and
+  installed on the stand; formats up to 640×480@60 and 320×240@187 confirmed;
+  live demo end-to-end (84 frames, 80 906 detections, `processed.mp4`).
+  See `auto-targeting/docs/CAMERA_PS_EYE_TEST.md`.
+- `--format mjpeg|yuyv` and `--backend v4l|direct` flags in `camera_latency`
+  and `live_camera_demo` examples; new `v4l2-direct-cam` feature of
+  `cv-inference`.
 - **`V4l2DirectSource`** — direct V4L2 capture via raw `libc` ioctl
   (`v4l2-direct` feature), bypassing the `v4l` crate abstraction that was the
   capture bottleneck. (`feat(video-capture): direct V4L2 capture via libc ioctl`)
@@ -44,6 +52,19 @@ is incomplete).
   9 ms, NPU inference = 29 ms (sequential total 61 ms; pipeline target ~29 ms).
 
 ### Fixed
+- `v4l2_direct.rs`: undefined `data_len` in the dequeue path (build error when
+  `v4l2` + `v4l2-direct` features combine) — use `bytesused` clamped to the
+  mapped buffer length.
+- `v4l2_direct.rs`: `VIDIOC_S_PARM timeperframe` offsets were 4 bytes early —
+  the driver read a garbage interval and silently kept the camera at its
+  default 30 fps regardless of the requested rate.
+- `convert.rs`: `yuyv_to_rgb24`/`yuyv_to_nv12` read out of bounds on the last
+  pixel pair of a frame (panic on the first real PS Eye frame). Now processed
+  pairwise per [Y0,U,Y1,V]; regression tests added.
+- `live_camera_demo`: the capture pump loop broke on channel **Full** (not
+  just Closed), killing capture after exactly 5 frames whenever inference
+  lagged the camera — this was the long-standing "v4l crate early-terminate"
+  mystery from the Arducam run. Now breaks only on Closed.
 - `v4l2_buffer` struct layout: kernel `timeval` is 12 bytes (not 16 like
   glibc), which shifted `m.offset`/`length`. Switched to raw `[u8; 88]` byte
   buffers with offsets verified via C `offsetof()`.

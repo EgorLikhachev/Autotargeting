@@ -18,9 +18,11 @@
 |---|---|---|---|
 | 6 | **Rust yolov8::postprocess нет sigmoid** — RKNN-export даёт raw логиты, ONNX-export встраивает sigmoid. C++ bridge уже починен (sigmoid для class scores), Rust-парсер — нет. Влияет только на CPU-путь (x86), NPU-путь работает. | P2 | Open |
 | 7 | **NMS tuning** — избыточные детекции (5171 за 15с live-demo), нужно ~10 на кадр. Threshold=0.45 не полностью подавляет overlapping мелкие boxes. | P2 | Open |
-| 8 | **`live_camera_demo` берёт мало кадров** (5 за 15с вместо ~450) — `v4l` crate early-terminate capture-loop. Решение: подключить `V4l2DirectSource` (feature `v4l2-direct`, модуль готов). | P1 | Open |
+| 8 | **`live_camera_demo` берёт мало кадров** (5 за 15с вместо ~450) — pump-цикл ломался на channel **Full**, а не только Closed | P1 → ✅ | **Fixed**: `pump_frames()` break только по Closed (`a15e427`); с PS Eye — 84 кадра/15с |
 | 9 | **`v4l` crate давал 21 FPS vs 100 у v4l2-ctl** | P0 → ✅ | **Fixed**: `v4l2_direct.rs` (прямой libc ioctl) → 32 FPS |
 | 10 | **SyntheticVideoSource channel bound=1** при infinite (back-pressure deadlock) | P1 → ✅ | **Fixed**: `(fps).clamp(3,30)` + `try_send` |
+| 11 | **`v4l` crate ВИСНЕТ на gspca-драйвере** (PS Eye/ov534): start() ок, recv() ни кадра | P0 для gspca | Обход: `--backend direct` (примеры уже поддерживают); на UVC — работает, но медленно |
+| 12 | **rknn-bridge без таймаутов** — однопоточный сервер может зависнуть на мёртвом клиентском сокете | P2 | Open (рестарт лечит; найдено при PS Eye-тесте) |
 
 ## Средовые ограничения
 
