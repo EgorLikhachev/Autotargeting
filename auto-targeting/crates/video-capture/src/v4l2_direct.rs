@@ -11,7 +11,6 @@
 
 #![cfg(target_os = "linux")]
 
-use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -412,6 +411,9 @@ fn run_direct_capture(
         // Read results by offset.
         let bytesused = u32::from_ne_bytes([buf[8], buf[9], buf[10], buf[11]]) as usize;
         let buf_idx = u32::from_ne_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
+        // Copy exactly what the driver wrote, clamped to the mapped buffer
+        // length so a buggy driver can't make us read out of bounds.
+        let data_len = bytesused.min(mapped.get(buf_idx).map(|b| b.length).unwrap_or(0));
         let frame_data = if buf_idx < mapped.len() && data_len > 0 {
             unsafe {
                 std::slice::from_raw_parts(mapped[buf_idx].ptr as *const u8, data_len).to_vec()
