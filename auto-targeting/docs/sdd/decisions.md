@@ -238,3 +238,60 @@ abstraction overhead. Ожидаемый результат: capture 21 FPS → 
 - (−) Платформо-зависимо (Linux only), но это и так ограничение V4L2.
 - (!) `v4l` crate остаётся как fallback для non-Linux; прямой ioctl —
   основная реализация для production.
+
+---
+
+## D-012 — Выбор ОС для Orange Pi 5 (RK3588): Armbian vendor 6.1
+**Дата:** 2026-08-16 · **Статус:** Accepted (рекомендация; миграция — отдельная задача)
+
+**Контекст:** Стенд работает на стоковом образе Orange Pi (Debian 12 +
+vendor kernel 6.1.99). Образ имеет критические минусы: kernel-headers
+отсутствуют в репозиториях (gspca_ov534 пришлось собирать из полного
+исходника ядра с git), нет систематических security-обновлений, GCC12
+блокирует cpu-onnx на устройстве (KNOWN_ISSUES, D-008). Требуется выбор
+поддерживаемого дистрибутива под production-траекторию (БВС).
+
+**Жёсткое ограничение:** весь NPU-стек проекта (`rknn-bridge` +
+`librknnrt.so` 2.3.0 + zero-copy `rknn_set_io_mem`) работает ТОЛЬКО с
+проприетарным vendor-драйвером `rknpu` из Rockchip BSP-ядра 6.1.
+Mainline-драйвер `accel/rocket` (ядро 6.18+, Collabora) **несовместим с
+RKNN SDK по UABI** (Tomeu Vizoso: "No, it's not and it couldn't be").
+Альтернатива — Mesa Teflon + TFLite — означает переписывание всего
+инференс-стека. → **Все mainline-only дистрибутивы (Fedora, openSUSE,
+Debian mainline, Armbian edge) отпадают для production.**
+
+**Рассмотренные альтернативы:**
+
+| Дистрибутив | Ядро | NPU | Вердикт |
+|---|---|---|---|
+| Стоковый Orange Pi (текущий) | vendor 6.1.99 | ✅ | работает, но без headers/updates — не production |
+| **Armbian vendor branch** | vendor 6.1 (BSP) | ✅ | **рекомендуется** — official support OPi5, apt-updates, headers |
+| Ubuntu Rockchip (Joshua-Riek) | vendor 6.1 | ✅ | **архивирован 2026-04-29**; fork defcom5 — только OPi5B |
+| Yocto (meta-rockchip / JeffyCN) | vendor 6.1-rkr5 | ✅ | «финальная форма» для серии, RKNN-патчи ещё в review; тяжело сейчас |
+| Mainline-дистрибутивы (Fedora/…) | 6.12+/6.18 rocket | ❌ | librknnrt несовместим — отпадают |
+
+**Решение:** **Armbian, ветка vendor-ядра 6.1, userland Ubuntu 24.04**
+(вариант: Debian 13 trixie). Обоснование:
+- official "Standard support" для Orange Pi 5 (armbian.com/boards/orangepi5);
+- vendor 6.1 BSP-ядро — NPU-путь сохраняется 1:1 (`librknnrt.so`,
+  `rknn-bridge`, zero-copy API не меняются);
+- apt-security-обновления userland+ядра;
+- kernel-headers через apt (`linux-headers-vendor-rk3588` / armbian-config;
+  fallback — armbian/build) → gspca_ov534 для PS Eye собирается штатно
+  (процедура — CAMERA_PS_EYE_TEST.md §3);
+- **GCC13 в userland Ubuntu 24.04 — разблокирует cpu-onnx на устройстве**
+  (закрывает ограничение D-008);
+- .deb/systemd/Docker-инфраструктура проекта переносится без изменений.
+
+**Yocto** (вероятно, имелся в виду под именем «Tokyo» — дистрибутива
+«Tokyo Linux» не существует): целесообразен при переходе к серийному
+БВС (воспроизводимые сборки, минимальный образ, OTA), но требует
+build-инфраструктуры и пере-интеграции стека; отложено до Phase 7+.
+
+**Последствия:**
+- (+) Security-обновления и headers — уходят два главных минуса стока.
+- (+) cpu-onnx на устройстве (GCC13) — упрощает A/B тесты CPU vs NPU.
+- (−) Миграция: переразвертывание системы, пересборка gspca_ov534 под
+  ядро Armbian (задокументировано), smoke-тест NPU-стека.
+- (−) Vendor-ядро 6.1 привязывает к BSP до смены NPU-стека (Rocket/Teflon
+  или нового SDK Rockchip) — риск зафиксирован, пересмотр при Phase 7.
