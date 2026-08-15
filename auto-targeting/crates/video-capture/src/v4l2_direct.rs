@@ -319,10 +319,12 @@ fn run_direct_capture(
     // 3. Set frame rate (VIDIOC_S_PARM).
     if fps > 0 {
         let mut parm: V4l2StreamParm = [0u8; 204];
-        // Write type (offset 0, u32) + timeperframe (numerator at offset 8, denominator at offset 12).
+        // struct v4l2_streamparm { type @0; union @4 -> v4l2_captureparm {
+        //   capability @4, capturemode @8, timeperframe { num @12, den @16 },
+        //   extendedmode @20, readbuffers @24 } }
         parm[0..4].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
-        parm[8..12].copy_from_slice(&1u32.to_ne_bytes()); // numerator
-        parm[12..16].copy_from_slice(&fps.to_ne_bytes()); // denominator
+        parm[12..16].copy_from_slice(&1u32.to_ne_bytes()); // numerator
+        parm[16..20].copy_from_slice(&fps.to_ne_bytes()); // denominator
         unsafe { ioctl(fd, VIDIOC_S_PARM, parm.as_mut_ptr() as *mut _)? };
     }
 
