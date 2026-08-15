@@ -38,6 +38,10 @@ preprocessing = []
 # Enable V4L2 camera capture in examples (live_camera_demo).
 # Requires the `v4l2` feature of video-capture (libclang-dev on Linux).
 v4l2-cam = ["video-capture/v4l2"]
+# Direct V4L2 ioctl capture (live_camera_demo --backend direct). Needed for
+# gspca cameras (PS Eye/ov534) where the `v4l` crate hangs on dequeue;
+# also ~1.5x faster on UVC.
+v4l2-direct-cam = ["video-capture/v4l2-direct"]
 
 [dev-dependencies]
 tokio-test = { workspace = true }

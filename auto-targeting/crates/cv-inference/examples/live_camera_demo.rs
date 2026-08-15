@@ -50,6 +50,10 @@ struct Args {
     /// Capture pixel format: "mjpeg" (Arducam OV9782) or "yuyv" (PS Eye).
     #[arg(long, default_value = "mjpeg")]
     format: String,
+    /// Capture backend: "v4l" (v4l crate) or "direct" (raw ioctl; needs
+    /// feature v4l2-direct-cam). PS Eye (gspca/ov534) requires "direct".
+    #[arg(long, default_value = "v4l")]
+    backend: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -117,23 +121,54 @@ fn run_live_demo(
         "yuyv" | "yuv422" => PixelFormat::Yuyv,
         other => anyhow::bail!("unknown --format '{other}' (expected: mjpeg | yuyv)"),
     };
+    let backend = args.backend.clone();
     std::thread::spawn(move || {
-        use video_capture::{VideoSource, V4l2Source};
+        use video_capture::VideoSource;
         let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async {
-            let mut src = V4l2Source::new(&dev, w, h, fps_val)
-                .with_format(pixel_format);
-            match src.start().await {
-                Ok(mut rx) => {
-                    while let Some(frame) = rx.recv().await {
-                        if frame_tx.try_send(frame).is_err() {
-                            break;
+        rt.block_on(async move {
+            match backend.as_str() {
+                "direct" => {
+                    #[cfg(feature = "v4l2-direct-cam")]
+                    {
+                        let mut src = video_capture::V4l2DirectSource::new(&dev, w, h, fps_val)
+                            .with_format(pixel_format)
+                            .with_buffers(4);
+                        match src.start().await {
+                            Ok(mut rx) => {
+                                while let Some(frame) = rx.recv().await {
+                                    if frame_tx.try_send(frame).is_err() {
+                                        break; // consumer dropped
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("[!] V4l2DirectSource error: {e}"),
                         }
+                        let _ = src.stop().await;
                     }
+                    #[cfg(not(feature = "v4l2-direct-cam"))]
+                    eprintln!("[!] --backend direct requires feature v4l2-direct-cam");
                 }
-                Err(e) => eprintln!("[!] V4L2 source error: {e}"),
+                _ => {
+                    #[cfg(feature = "v4l2-cam")]
+                    {
+                        let mut src = video_capture::V4l2Source::new(&dev, w, h, fps_val)
+                            .with_format(pixel_format);
+                        match src.start().await {
+                            Ok(mut rx) => {
+                                while let Some(frame) = rx.recv().await {
+                                    if frame_tx.try_send(frame).is_err() {
+                                        break; // consumer dropped
+                                    }
+                                }
+                            }
+                            Err(e) => eprintln!("[!] V4L2 source error: {e}"),
+                        }
+                        let _ = src.stop().await;
+                    }
+                    #[cfg(not(feature = "v4l2-cam"))]
+                    eprintln!("[!] default --backend v4l requires feature v4l2-cam");
+                }
             }
-            let _ = src.stop().await;
         });
     });
 
