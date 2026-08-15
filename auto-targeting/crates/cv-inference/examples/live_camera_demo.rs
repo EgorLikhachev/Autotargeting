@@ -47,6 +47,9 @@ struct Args {
     /// Font path for labels.
     #[arg(long)]
     font: Option<PathBuf>,
+    /// Capture pixel format: "mjpeg" (Arducam OV9782) or "yuyv" (PS Eye).
+    #[arg(long, default_value = "mjpeg")]
+    format: String,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -109,12 +112,17 @@ fn run_live_demo(
     let w = args.width;
     let h = args.height;
     let fps_val = args.fps;
+    let pixel_format = match args.format.as_str() {
+        "mjpeg" | "jpg" => PixelFormat::Mjpeg,
+        "yuyv" | "yuv422" => PixelFormat::Yuyv,
+        other => anyhow::bail!("unknown --format '{other}' (expected: mjpeg | yuyv)"),
+    };
     std::thread::spawn(move || {
         use video_capture::{VideoSource, V4l2Source};
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let mut src = V4l2Source::new(&dev, w, h, fps_val)
-                .with_format(PixelFormat::Mjpeg);
+                .with_format(pixel_format);
             match src.start().await {
                 Ok(mut rx) => {
                     while let Some(frame) = rx.recv().await {
@@ -173,22 +181,31 @@ fn run_live_demo(
         };
         total_frames += 1;
 
-        // Decode MJPG → RGB24
-        let mut decoder = jpeg_decoder::Decoder::new(&frame.data[..]);
-        let pixels = match decoder.decode() {
-            Ok(p) => p,
-            Err(e) => { eprintln!("decode err: {e}"); continue; }
-        };
-        let info = decoder.info().unwrap();
-        let rgb_frame = Frame {
-            data: pixels,
-            metadata: FrameMetadata {
-                width: info.width as u32,
-                height: info.height as u32,
-                format: PixelFormat::Rgb24,
-                captured_at: frame.metadata.captured_at,
-                seq: frame.metadata.seq,
+        // Decode → RGB24: MJPG через jpeg-decoder, YUYV через конверсию пикселей.
+        let rgb_frame = match frame.metadata.format {
+            PixelFormat::Yuyv => match video_capture::convert::yuyv_to_rgb24(&frame) {
+                Ok(f) => f,
+                Err(e) => { eprintln!("yuyv convert err: {e}"); continue; }
             },
+            PixelFormat::Mjpeg => {
+                let mut decoder = jpeg_decoder::Decoder::new(&frame.data[..]);
+                let pixels = match decoder.decode() {
+                    Ok(p) => p,
+                    Err(e) => { eprintln!("decode err: {e}"); continue; }
+                };
+                let info = decoder.info().unwrap();
+                Frame {
+                    data: pixels,
+                    metadata: FrameMetadata {
+                        width: info.width as u32,
+                        height: info.height as u32,
+                        format: PixelFormat::Rgb24,
+                        captured_at: frame.metadata.captured_at,
+                        seq: frame.metadata.seq,
+                    },
+                }
+            }
+            other => { eprintln!("unsupported capture format: {other:?}"); continue; }
         };
 
         // Resize to 640x640 for NPU (simple stretch for demo)

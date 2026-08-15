@@ -40,6 +40,9 @@ struct Args {
     /// Without this flag, capture and decode run sequentially (old behaviour).
     #[arg(long, default_value_t = false)]
     pipeline: bool,
+    /// Pixel format: "mjpeg" (Arducam OV9782) or "yuyv" (PS Eye / uncompressed UVC).
+    #[arg(long, default_value = "mjpeg")]
+    format: String,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -74,16 +77,25 @@ impl Stats {
 
 fn main() {
     let args = Args::parse();
+    let pixel_format = match args.format.as_str() {
+        "mjpeg" | "jpg" => PixelFormat::Mjpeg,
+        "yuyv" | "yuv422" => PixelFormat::Yuyv,
+        other => {
+            eprintln!("[!] unknown --format '{other}' (expected: mjpeg | yuyv)");
+            std::process::exit(2);
+        }
+    };
     println!("=== USB Camera Latency Benchmark ===");
     println!(
-        "Device: {}  {}x{} @ {} fps  frames={}  pipeline={}",
-        args.device, args.width, args.height, args.fps, args.count, args.pipeline
+        "Device: {}  {}x{} @ {} fps  frames={}  pipeline={}  format={}",
+        args.device, args.width, args.height, args.fps, args.count, args.pipeline, args.format
     );
     println!();
 
-    // Build V4L2 source (MJPG — Arducam OV9782 поддерживает только MJPG).
+    // MJPG — Arducam OV9782 (сжатие в камере); YUYV — PS Eye и прочие
+    // uncompressed-камеры (декод = конверсия пикселей, не JPEG).
     let mut source = V4l2Source::new(&args.device, args.width, args.height, args.fps)
-        .with_format(PixelFormat::Mjpeg);
+        .with_format(pixel_format);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
@@ -160,7 +172,7 @@ fn main() {
                 let capture_us = t_capture_start.elapsed().as_micros() as u64;
 
                 let t_decode_start = Instant::now();
-                let _rgb_frame = decode_mjpg_to_rgb(&frame);
+                let _rgb_frame = decode_to_rgb(&frame);
                 let decode_us = t_decode_start.elapsed().as_micros() as u64;
                 let total_us = t_capture_start.elapsed().as_micros() as u64;
 
@@ -182,7 +194,7 @@ fn main() {
                 fps
             );
             print_stage("Capture (V4L2 dequeue)", &capture_stats);
-            print_stage("Decode (MJPG→RGB24)", &decode_stats);
+            print_stage(&format!("Decode ({}→RGB24)", args.format.to_uppercase()), &decode_stats);
             print_stage("Total (capture+decode)", &total_stats);
         }
 
@@ -199,6 +211,17 @@ fn print_stage(name: &str, s: &Stats) {
         s.percentile(95.0) / 1000.0,
         s.samples_us.iter().max().copied().unwrap_or(0) as f64 / 1000.0,
     );
+}
+
+/// Decode to RGB24, dispatching on the frame's actual pixel format.
+/// MJPG → jpeg-decoder (тот же путь, что в video-capture/convert.rs);
+/// YUYV → конверсия пикселей из video-capture/convert.rs (без JPEG).
+fn decode_to_rgb(frame: &Frame) -> Frame {
+    match frame.metadata.format {
+        PixelFormat::Yuyv => video_capture::convert::yuyv_to_rgb24(frame).expect("yuyv convert"),
+        PixelFormat::Mjpeg => decode_mjpg_to_rgb(frame),
+        other => panic!("unsupported capture format for decode: {other:?}"),
+    }
 }
 
 /// MJPG → RGB24 через jpeg-decoder (тот же путь, что в video-capture/convert.rs).
