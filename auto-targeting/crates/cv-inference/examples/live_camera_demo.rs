@@ -100,6 +100,28 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Прокачка кадров из source-канала в demo-канал.
+///
+/// Break — ТОЛЬКО когда consumer отвалился (Closed). Full (consumer занят
+/// инференсом) — это НОРМАЛЬНАЯ ситуация для realtime: дропаем кадр и
+/// продолжаем захват. Раньше здесь был `try_send(frame).is_err() => break`,
+/// который рвал захват на 5-м кадре (канал depth=4 + 1 в полёте), как только
+/// инференс оказывался медленнее камеры.
+#[cfg(unix)]
+async fn pump_frames(
+    rx: &mut tokio::sync::mpsc::Receiver<Frame>,
+    tx: &tokio::sync::mpsc::Sender<Frame>,
+) {
+    use tokio::sync::mpsc::error::TrySendError;
+    while let Some(frame) = rx.recv().await {
+        match tx.try_send(frame) {
+            Ok(()) => {}
+            Err(TrySendError::Closed(_)) => break, // consumer dropped
+            Err(TrySendError::Full(_)) => {}       // drop frame, keep capturing
+        }
+    }
+}
+
 #[cfg(unix)]
 fn run_live_demo(
     args: Args,
@@ -134,13 +156,7 @@ fn run_live_demo(
                             .with_format(pixel_format)
                             .with_buffers(4);
                         match src.start().await {
-                            Ok(mut rx) => {
-                                while let Some(frame) = rx.recv().await {
-                                    if frame_tx.try_send(frame).is_err() {
-                                        break; // consumer dropped
-                                    }
-                                }
-                            }
+                            Ok(mut rx) => pump_frames(&mut rx, &frame_tx).await,
                             Err(e) => eprintln!("[!] V4l2DirectSource error: {e}"),
                         }
                         let _ = src.stop().await;
@@ -154,13 +170,7 @@ fn run_live_demo(
                         let mut src = video_capture::V4l2Source::new(&dev, w, h, fps_val)
                             .with_format(pixel_format);
                         match src.start().await {
-                            Ok(mut rx) => {
-                                while let Some(frame) = rx.recv().await {
-                                    if frame_tx.try_send(frame).is_err() {
-                                        break; // consumer dropped
-                                    }
-                                }
-                            }
+                            Ok(mut rx) => pump_frames(&mut rx, &frame_tx).await,
                             Err(e) => eprintln!("[!] V4L2 source error: {e}"),
                         }
                         let _ = src.stop().await;
