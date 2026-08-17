@@ -274,6 +274,7 @@ mod multiprocess {
         p.pop(); // deps/ -> target/<profile>/
         p.push("examples");
         p.push(name);
+        eprintln!("[diag] spawning {} (exists={})", p.display(), p.exists());
         p
     }
 
