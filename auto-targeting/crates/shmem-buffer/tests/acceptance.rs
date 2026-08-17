@@ -268,9 +268,10 @@ mod multiprocess {
     use shmem_buffer::{attach_shared, remove_segment};
 
     fn exe(name: &str) -> std::path::PathBuf {
+        // current_exe = target/<profile>/deps/<test-bin>; examples живут
+        // в target/<profile>/examples — один pop из deps/.
         let mut p = std::env::current_exe().expect("exe path");
-        p.pop(); // deps/
-        p.pop(); // debug/
+        p.pop(); // deps/ -> target/<profile>/
         p.push("examples");
         p.push(name);
         p
