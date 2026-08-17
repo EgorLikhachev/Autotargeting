@@ -208,11 +208,15 @@ pub fn annotate(
 }
 
 /// Encode an `RgbImage` to JPEG bytes (quality ~92 — good for debug overlays).
-pub fn encode_jpeg(img: &RgbImage) -> VisualizerResult<Vec<u8>> {
+///
+/// Принимает кадр **по значению** (перф-аудит 2026-08: прежний `&RgbImage`
+/// делал `img.clone()` — лишнюю полнокадровую копию на каждый сохранённый
+/// кадр — только чтобы отдать владение DynamicImage).
+pub fn encode_jpeg(img: RgbImage) -> VisualizerResult<Vec<u8>> {
     let mut buf = std::io::Cursor::new(Vec::with_capacity(
         (img.width() as usize) * (img.height() as usize) / 4,
     ));
-    image::DynamicImage::ImageRgb8(img.clone())
+    image::DynamicImage::ImageRgb8(img)
         .write_to(&mut buf, image::ImageFormat::Jpeg)
         .map_err(|e| VisualizerError::ImageEncode(e.to_string()))?;
     Ok(buf.into_inner())
@@ -329,7 +333,7 @@ impl FrameWriter {
         }
 
         let annotated = annotate(frame, detections, self.font.as_ref())?;
-        let jpeg = encode_jpeg(&annotated)?;
+        let jpeg = encode_jpeg(annotated)?;
 
         let saved_seq = self.saved_counter + 1;
         let fname = format!("seq_{saved_seq:06}.jpg");
@@ -480,7 +484,7 @@ mod tests {
     #[test]
     fn encode_jpeg_returns_valid_jpeg() {
         let img = RgbImage::from_pixel(8, 8, Rgb([128, 128, 128]));
-        let bytes = encode_jpeg(&img).unwrap();
+        let bytes = encode_jpeg(img).unwrap();
         // JPEG SOI marker.
         assert_eq!(&bytes[0..2], &[0xFF, 0xD8]);
         // EOI marker at the end.

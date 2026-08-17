@@ -299,34 +299,49 @@ impl RknnBridgeClient {
             .map_err(|e| InferenceError::BridgeProtocol(format!("utf8 decode: {e}")))
     }
 
-    /// Base64 encode (упрощённая реализация, без extern crate).
+    /// Base64 encode (перф-аудит 2026-08: быстрый путь без ветвлений на
+    /// полный 3-байтовый чанк; байты пишутся в Vec<u8> — String::push(char)
+    /// делал UTF-8-энкод на каждый из 1.8M символов кадра; хвост ≤2 байт
+    /// обрабатывается отдельно).
     fn base64_encode(data: &[u8]) -> String {
         const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
+        let mut out = Vec::with_capacity(data.len().div_ceil(3) * 4);
 
-        for chunk in data.chunks(3) {
-            let b0 = chunk[0] as u32;
-            let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-            let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
-            let triple = (b0 << 16) | (b1 << 8) | b2;
-
-            result.push(CHARS[((triple >> 18) & 0x3F) as usize] as char);
-            result.push(CHARS[((triple >> 12) & 0x3F) as usize] as char);
-
-            if chunk.len() > 1 {
-                result.push(CHARS[((triple >> 6) & 0x3F) as usize] as char);
-            } else {
-                result.push('=');
-            }
-
-            if chunk.len() > 2 {
-                result.push(CHARS[(triple & 0x3F) as usize] as char);
-            } else {
-                result.push('=');
-            }
+        let mut quad = [0u8; 4];
+        for chunk in data.chunks_exact(3) {
+            let triple =
+                (u32::from(chunk[0]) << 16) | (u32::from(chunk[1]) << 8) | u32::from(chunk[2]);
+            quad[0] = CHARS[((triple >> 18) & 0x3F) as usize];
+            quad[1] = CHARS[((triple >> 12) & 0x3F) as usize];
+            quad[2] = CHARS[((triple >> 6) & 0x3F) as usize];
+            quad[3] = CHARS[(triple & 0x3F) as usize];
+            out.extend_from_slice(&quad);
         }
 
-        result
+        match data.chunks_exact(3).remainder() {
+            [b0] => {
+                let triple = u32::from(*b0) << 16;
+                out.extend_from_slice(&[
+                    CHARS[((triple >> 18) & 0x3F) as usize],
+                    CHARS[((triple >> 12) & 0x3F) as usize],
+                    b'=',
+                    b'=',
+                ]);
+            }
+            [b0, b1] => {
+                let triple = (u32::from(*b0) << 16) | (u32::from(*b1) << 8);
+                out.extend_from_slice(&[
+                    CHARS[((triple >> 18) & 0x3F) as usize],
+                    CHARS[((triple >> 12) & 0x3F) as usize],
+                    CHARS[((triple >> 6) & 0x3F) as usize],
+                    b'=',
+                ]);
+            }
+            _ => {}
+        }
+
+        // Вывод base64 — чистый ASCII; from_utf8 — одна валидирующая проверка.
+        String::from_utf8(out).expect("base64 is ASCII")
     }
 }
 

@@ -118,29 +118,40 @@ pub fn yuyv_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
     // NV12: Y plane (w*h) + UV plane (w*h/2) = w*h*3/2 bytes
     let mut nv12 = vec![0u8; w * h * 3 / 2];
 
-    // Y plane: extract every even-indexed byte from YUYV
-    for y in 0..h {
-        for x in 0..w {
-            let yuyv_idx = (y * w + x) * 2;
-            nv12[y * w + x] = frame.data[yuyv_idx];
+    // Y plane: копируем Y-байты (каждый чётный) построчно chunks-итераторами —
+    // без bounds-checks и адресной арифметики на пиксель.
+    let (y_plane, uv_plane) = nv12.split_at_mut(w * h);
+    for (src_row, y_row) in frame.data.chunks_exact(w * 2).zip(y_plane.chunks_exact_mut(w)) {
+        for (pair, out2) in src_row.chunks_exact(4).zip(y_row.chunks_exact_mut(2)) {
+            out2.copy_from_slice(&[pair[0], pair[2]]);
+        }
+        // Нечётная ширина (нестандарт YUYV): одиночный Y-хвост.
+        if w % 2 == 1 {
+            let last = src_row.chunks_exact(4).remainder();
+            if let Some(y_val) = last.first() {
+                if let Some(slot) = y_row.last_mut() {
+                    *slot = *y_val;
+                }
+            }
         }
     }
 
-    // UV plane: for each 2x2 block, take U and V from the first YUYV pair.
-    // Нечётные w/h нестандартны для YUYV/NV12: читаем хрому через get()
-    // (нейтральный 128 при выходе за границы), непарная последняя строка
-    // пропускается.
-    let uv_offset = w * h;
-    for y in (0..h.saturating_sub(1)).step_by(2) {
-        for x in (0..w).step_by(2) {
-            // Take U, V from pixel (x, y)
-            let yuyv_idx = (y * w + x) * 2;
-            let u = frame.data.get(yuyv_idx + 1).copied().unwrap_or(128);
-            let v = frame.data.get(yuyv_idx + 3).copied().unwrap_or(128);
-
-            let uv_idx = uv_offset + (y / 2) * w + x;
-            nv12[uv_idx] = u;
-            nv12[uv_idx + 1] = v;
+    // UV plane: U/V из первой пары пикселей каждой чётной строки.
+    // Нечётные w/h нестандартны: хрома через remainder-хвост (нейтральная),
+    // непарная последняя строка пропускается.
+    let uv_rows = (h / 2) * w;
+    for (row_idx, uv_row) in uv_plane[..uv_rows].chunks_exact_mut(w).enumerate() {
+        let src_row = &frame.data[(2 * row_idx) * w * 2..][..w * 2];
+        for (pair, out2) in src_row.chunks_exact(4).zip(uv_row.chunks_exact_mut(2)) {
+            out2.copy_from_slice(&[pair[1], pair[3]]);
+        }
+        if w % 2 == 1 {
+            // Хвостовая пара неполная: V может отсутствовать — берём что есть.
+            let tail = src_row.chunks_exact(4).remainder();
+            let u = tail.get(1).copied().unwrap_or(128);
+            let v = tail.get(3).copied().unwrap_or(128);
+            let x = w - 1;
+            uv_row[x..].copy_from_slice(&[u, v][..w - x]); // 1 байт U (V вне строки)
         }
     }
 
@@ -181,40 +192,32 @@ pub fn yuyv_to_rgb24(frame: &Frame) -> ConversionResult<Frame> {
     let mut rgb = vec![0u8; w * h * 3];
 
     // YUYV packed: [Y0, U, Y1, V] — 4 байта на пару пикселей.
-    // Читаем строго парами: это даёт правильную хрому для обоих пикселей
-    // и не выходит за границы на последней паре (макс. индекс = 2wh-1).
-    for y in 0..h {
-        let row = y * w;
-        let mut x = 0;
-        while x + 1 < w {
-            let base = (row + x) * 2;
-            let u_val = frame.data[base + 1] as f32 - 128.0;
-            let v_val = frame.data[base + 3] as f32 - 128.0;
-
-            let (r0, g0, b0) = ycbcr_to_rgb(frame.data[base] as f32, u_val, v_val);
-            let (r1, g1, b1) = ycbcr_to_rgb(frame.data[base + 2] as f32, u_val, v_val);
-
-            let rgb_idx = (row + x) * 3;
-            rgb[rgb_idx] = r0;
-            rgb[rgb_idx + 1] = g0;
-            rgb[rgb_idx + 2] = b0;
-            rgb[rgb_idx + 3] = r1;
-            rgb[rgb_idx + 4] = g1;
-            rgb[rgb_idx + 5] = b1;
-            x += 2;
+    // Построчно chunks-итераторами + integer BT.601 (×256 fixed-point):
+    // без bounds-checks и без f32 round на пиксель (перф-аудит 2026-08).
+    for (src_row, dst_row) in frame
+        .data
+        .chunks_exact(w * 2)
+        .zip(rgb.chunks_exact_mut(w * 3))
+    {
+        for (pair, out6) in src_row.chunks_exact(4).zip(dst_row.chunks_exact_mut(6)) {
+            let u = pair[1] as i32 - 128;
+            let v = pair[3] as i32 - 128;
+            let (r0, g0, b0) = ycbcr_to_rgb_i32(pair[0] as i32, u, v);
+            let (r1, g1, b1) = ycbcr_to_rgb_i32(pair[2] as i32, u, v);
+            out6.copy_from_slice(&[r0, g0, b0, r1, g1, b1]);
         }
         // Нечётная ширина (нестандарт для YUYV): последний одиночный пиксель,
-        // хрому берём с запасом через get(), чтобы не выйти за границы.
-        if x < w {
-            let base = (row + x) * 2;
-            let y_val = frame.data[base] as f32;
-            let u_val = frame.data.get(base + 1).copied().unwrap_or(128) as f32 - 128.0;
-            let v_val = frame.data.get(base + 3).copied().unwrap_or(128) as f32 - 128.0;
-            let (r, g, b) = ycbcr_to_rgb(y_val, u_val, v_val);
-            let rgb_idx = (row + x) * 3;
-            rgb[rgb_idx] = r;
-            rgb[rgb_idx + 1] = g;
-            rgb[rgb_idx + 2] = b;
+        // хрому берём с хвоста пары (нейтральная при отсутствии).
+        if w % 2 == 1 {
+            let tail = src_row.chunks_exact(4).remainder();
+            let y_val = tail.first().copied().unwrap_or(128) as i32;
+            let u = tail.get(1).copied().unwrap_or(128) as i32 - 128;
+            let v = tail.get(3).copied().unwrap_or(128) as i32 - 128; // remainder ≤ 2 байта → нейтраль
+            let (r, g, b) = ycbcr_to_rgb_i32(y_val, u, v);
+            let out3 = &mut dst_row[(w - 1) * 3..];
+            out3[0] = r;
+            out3[1] = g;
+            out3[2] = b;
         }
     }
 
@@ -254,52 +257,58 @@ pub fn rgb24_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
 
     let mut nv12 = vec![0u8; w * h * 3 / 2];
 
-    // Y plane
-    for y in 0..h {
-        for x in 0..w {
-            let rgb_idx = (y * w + x) * 3;
-            let r = frame.data[rgb_idx] as f32;
-            let g = frame.data[rgb_idx + 1] as f32;
-            let b = frame.data[rgb_idx + 2] as f32;
-
-            let y_val = 0.299 * r + 0.587 * g + 0.114 * b;
-            nv12[y * w + x] = y_val.round().clamp(0.0, 255.0) as u8;
+    // Y plane: построчные chunks + integer BT.601 (расхождение с f32 ≤ 1).
+    let (y_plane, uv_plane) = nv12.split_at_mut(w * h);
+    for (src_row, y_row) in frame.data.chunks_exact(w * 3).zip(y_plane.chunks_exact_mut(w)) {
+        for (px, out) in src_row.chunks_exact(3).zip(y_row.iter_mut()) {
+            *out = rgb_to_y_u8(px[0], px[1], px[2]);
         }
     }
 
-    // UV plane — average 2x2 blocks
-    let uv_offset = w * h;
-    for y in (0..h).step_by(2) {
-        for x in (0..w).step_by(2) {
-            // Average 4 pixels
-            let mut u_sum = 0.0;
-            let mut v_sum = 0.0;
-            let mut count = 0;
-
-            for dy in 0..2 {
-                for dx in 0..2 {
-                    let px = x + dx;
-                    let py = y + dy;
-                    if px < w && py < h {
-                        let rgb_idx = (py * w + px) * 3;
-                        let r = frame.data[rgb_idx] as f32;
-                        let g = frame.data[rgb_idx + 1] as f32;
-                        let b = frame.data[rgb_idx + 2] as f32;
-
-                        let (_, u, v) = rgb_to_ycbcr(r, g, b);
-                        u_sum += u as f32;
-                        v_sum += v as f32;
-                        count += 1;
-                    }
-                }
-            }
-
-            let u = (u_sum / count as f32).round().clamp(0.0, 255.0) as u8;
-            let v = (v_sum / count as f32).round().clamp(0.0, 255.0) as u8;
-
-            let uv_idx = uv_offset + (y / 2) * w + x;
-            nv12[uv_idx] = u;
-            nv12[uv_idx + 1] = v;
+    // UV plane — среднее 2x2 блоков на raw i32-хроме (без округления на
+    // каждый пиксель, без ветвлений для чётных измерений).
+    let uv_rows = h / 2;
+    for row in 0..uv_rows {
+        let src0 = &frame.data[(2 * row) * w * 3..][..w * 3];
+        let src1 = &frame.data[(2 * row + 1) * w * 3..][..w * 3]; // чётное h
+        let uv_row = &mut uv_plane[row * w..][..w];
+        let mut x = 0;
+        // Чётные пары столбцов: полный 2x2 блок.
+        while x + 1 < w {
+            let p0 = &src0[x * 3..x * 3 + 3];
+            let p1 = &src0[x * 3 + 3..x * 3 + 6];
+            let p2 = &src1[x * 3..x * 3 + 3];
+            let p3 = &src1[x * 3 + 3..x * 3 + 6];
+            let cu = rgb_to_cb(p0) + rgb_to_cb(p1) + rgb_to_cb(p2) + rgb_to_cb(p3);
+            let cv = rgb_to_cr(p0) + rgb_to_cr(p1) + rgb_to_cr(p2) + rgb_to_cr(p3);
+            uv_row[x] = clamp_i32_to_u8(cu >> 10); // (cu/4) >> 8 == cu >> 10
+            uv_row[x + 1] = clamp_i32_to_u8(cv >> 10);
+            x += 2;
+        }
+        // Нечётная ширина: последний блок 1x2 (столбец один).
+        if x < w {
+            let p0 = &src0[x * 3..x * 3 + 3];
+            let p2 = &src1[x * 3..x * 3 + 3];
+            let cu = (rgb_to_cb(p0) + rgb_to_cb(p2)) >> 1;
+            // V хвостового неполного блока не пишется: его позиция — начало
+            // следующей UV-строки (нестандартный нечётный w; прежний код
+            // писал и тут же перезатирал).
+            let _cv = (rgb_to_cr(p0) + rgb_to_cr(p2)) >> 1;
+            uv_row[x] = clamp_i32_to_u8(cu >> 8);
+        }
+    }
+    // Нечётная высота (нестандарт для NV12): последняя UV-строка из одной
+    // строки пикселей; UV-плоскость при нечётном h короче — пишем сколько влезает.
+    if h % 2 == 1 {
+        let src = &frame.data[(h - 1) * w * 3..][..w * 3];
+        let uv_row = &mut uv_plane[uv_rows * w..];
+        let mut x = 0;
+        while x + 1 < uv_row.len() {
+            let cu = (rgb_to_cb(&src[x * 3..x * 3 + 3]) + rgb_to_cb(&src[x * 3 + 3..x * 3 + 6])) >> 1;
+            let cv = (rgb_to_cr(&src[x * 3..x * 3 + 3]) + rgb_to_cr(&src[x * 3 + 3..x * 3 + 6])) >> 1;
+            uv_row[x] = clamp_i32_to_u8(cu >> 8);
+            uv_row[x + 1] = clamp_i32_to_u8(cv >> 8);
+            x += 2;
         }
     }
 
@@ -339,6 +348,7 @@ pub fn convert_to(frame: &Frame, target: PixelFormat) -> ConversionResult<Frame>
 /// YCbCr → RGB (BT.601).
 /// Y в [0, 255], Cb/Cr смещены на -128.
 #[inline]
+#[allow(dead_code)] // f32-эталон: используется тестами (round-trip, согласованность)
 fn ycbcr_to_rgb(y: f32, cb: f32, cr: f32) -> (u8, u8, u8) {
     let r = y + 1.402 * cr;
     let g = y - 0.344 * cb - 0.714 * cr;
@@ -351,9 +361,47 @@ fn ycbcr_to_rgb(y: f32, cb: f32, cr: f32) -> (u8, u8, u8) {
     )
 }
 
+// ===== Integer BT.601 (×256 fixed-point) — горячие пути (перф-аудит 2026-08) =====
+// Коэффициенты: 1.402→359, 0.344→88, 0.714→183, 1.772→454;
+// 0.299→77, 0.587→150, 0.114→29, 0.169→43, 0.331→85, 0.5→128,
+// 0.419→107, 0.081→21. Расхождение с f32-версией ≤ 1 (округления).
+
+#[inline]
+fn clamp_i32_to_u8(v: i32) -> u8 {
+    v.clamp(0, 255) as u8
+}
+
+/// YCbCr → RGB, integer. `cb`/`cr` — уже центрированные (−128..127).
+#[inline]
+fn ycbcr_to_rgb_i32(y: i32, cb: i32, cr: i32) -> (u8, u8, u8) {
+    let r = y + ((359 * cr) >> 8);
+    let g = y - ((88 * cb + 183 * cr) >> 8);
+    let b = y + ((454 * cb) >> 8);
+    (clamp_i32_to_u8(r), clamp_i32_to_u8(g), clamp_i32_to_u8(b))
+}
+
+/// RGB → Y (только люма; для Y-плоскости).
+#[inline]
+fn rgb_to_y_u8(r: u8, g: u8, b: u8) -> u8 {
+    clamp_i32_to_u8((77 * r as i32 + 150 * g as i32 + 29 * b as i32 + 128) >> 8)
+}
+
+/// RGB → Cb (raw ×256, БЕЗ clamp/округления — для усреднения 2x2).
+#[inline]
+fn rgb_to_cb(px: &[u8]) -> i32 {
+    -43 * px[0] as i32 - 85 * px[1] as i32 + 128 * px[2] as i32 + 32_768
+}
+
+/// RGB → Cr (raw ×256, БЕЗ clamp/округления).
+#[inline]
+fn rgb_to_cr(px: &[u8]) -> i32 {
+    128 * px[0] as i32 - 107 * px[1] as i32 - 21 * px[2] as i32 + 32_768
+}
+
 /// RGB → YCbCr (BT.601).
 /// Возвращает (Y, Cb, Cr) в [0, 255].
 #[inline]
+#[allow(dead_code)] // f32-эталон: используется тестами (round-trip, согласованность)
 fn rgb_to_ycbcr(r: f32, g: f32, b: f32) -> (u8, u8, u8) {
     let y = 0.299 * r + 0.587 * g + 0.114 * b;
     let cb = -0.169 * r - 0.331 * g + 0.500 * b + 128.0;
@@ -498,6 +546,44 @@ mod tests {
         assert_eq!(y, 255);
         assert_eq!(cb, 128);
         assert_eq!(cr, 128);
+    }
+
+    /// Integer-хелперы должны совпадать с f32-эталоном в пределах ±1
+    /// (перф-аудит 2026-08: горячие пути переведены на fixed-point).
+    #[test]
+    fn integer_helpers_match_f32_reference() {
+        let mut y = 16;
+        while y <= 235 {
+            for cb in [0i32, 64, 128, 192, 255] {
+                for cr in [0i32, 64, 128, 192, 255] {
+                    let f = ycbcr_to_rgb(
+                        y as f32,
+                        cb as f32 - 128.0,
+                        cr as f32 - 128.0,
+                    );
+                    let i = ycbcr_to_rgb_i32(y, cb - 128, cr - 128);
+                    assert!(
+                        (f.0 as i32 - i.0 as i32).abs() <= 1
+                            && (f.1 as i32 - i.1 as i32).abs() <= 1
+                            && (f.2 as i32 - i.2 as i32).abs() <= 1,
+                        "y={y} cb={cb} cr={cr}: f32 {f:?} vs int {i:?}"
+                    );
+                }
+            }
+            y += 17;
+        }
+        // Люма: f32-формула vs integer.
+        for r in [0u8, 1, 17, 64, 100, 128, 200, 254, 255] {
+            for g in [0u8, 3, 33, 90, 128, 180, 250, 255] {
+                for b in [0u8, 7, 45, 128, 210, 255] {
+                    let f = (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
+                        .round()
+                        .clamp(0.0, 255.0) as i32;
+                    let i = rgb_to_y_u8(r, g, b) as i32;
+                    assert!((f - i).abs() <= 1, "rgb({r},{g},{b}): f32 {f} vs int {i}");
+                }
+            }
+        }
     }
 
     #[test]

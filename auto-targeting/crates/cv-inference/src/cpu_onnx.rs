@@ -52,6 +52,9 @@ pub struct CpuInferenceBackend {
     /// models (Phase 1.2 narrow classes).
     pub labels: Vec<String>,
     session: Option<Session>,
+    /// Имя входа модели (кэш — было String-аллокацией на каждый кадр;
+    /// перф-аудит 2026-08).
+    input_name: Option<String>,
 }
 
 impl CpuInferenceBackend {
@@ -63,6 +66,7 @@ impl CpuInferenceBackend {
             iou_threshold: 0.45,
             labels: COCO_LABELS.iter().map(|s| s.to_string()).collect(),
             session: None,
+            input_name: None,
         }
     }
 
@@ -109,18 +113,17 @@ impl CpuInferenceBackend {
         let input_value = Tensor::from_array(input_array)
             .map_err(|e| InferenceError::Inference(format!("ort tensor from array: {e}")))?;
 
-        // 4) Build the named inputs ort expects. The model's first input name
-        //    is used (Ultralytics export names it "images").
-        let input_name = session
-            .inputs()
-            .first()
-            .map(|i| i.name().to_string())
-            .ok_or_else(|| InferenceError::Inference("model has no inputs".into()))?;
+        // 4) Build the named inputs ort expects. Имя входа закэшировано
+        //    при init (перф-аудит 2026-08: без String-аллокации на кадр).
+        let input_name = self
+            .input_name
+            .as_deref()
+            .ok_or_else(|| InferenceError::Inference("backend not initialized".into()))?;
 
         // `inputs!` expands to a Vec<(Cow<str>, SessionInputValue)>. It does
         // not return a Result in ort 2.0.0-rc.13.
         let inputs = ort::inputs! {
-            input_name.as_str() => input_value
+            input_name => input_value
         };
 
         // 5) Run inference.
@@ -190,6 +193,12 @@ impl InferenceBackend for CpuInferenceBackend {
             outputs = session.outputs().len(),
             "CpuInferenceBackend: ONNX model loaded"
         );
+        // Кэшируем имя входа (per-frame lookup делал String-аллокацию
+        // на каждый кадр — перф-аудит 2026-08).
+        self.input_name = session
+            .inputs()
+            .first()
+            .map(|i| i.name().to_string());
         self.session = Some(session);
         Ok(())
     }
@@ -256,23 +265,34 @@ fn frame_to_rgb24(frame: &Frame) -> InferenceResult<Vec<u8>> {
 /// Inline rather than depending on video-capture to keep cv-inference's build
 /// graph simple for the cpu-onnx path.
 fn nv12_to_rgb24(nv12: &[u8], w: usize, h: usize) -> Vec<u8> {
+    // Перф-аудит 2026-08: integer BT.601 (×256 fixed-point) + построчные
+    // chunks (без bounds-checks и div на пиксель); хрома читается на пару
+    // пикселей. Расхождение с f32-эталоном ≤ 1.
     let mut out = vec![0u8; w * h * 3];
-    let y_off = 0;
     let uv_off = w * h;
-    for j in 0..h {
-        for i in 0..w {
-            let y = nv12[y_off + j * w + i] as f32;
-            let ci = (i / 2) * 2;
-            let uv_idx = uv_off + (j / 2) * w + ci;
-            let u = nv12[uv_idx] as f32 - 128.0;
-            let v = nv12[uv_idx + 1] as f32 - 128.0;
-            let r = (y + 1.402 * v).round().clamp(0.0, 255.0) as u8;
-            let g = (y - 0.344 * u - 0.714 * v).round().clamp(0.0, 255.0) as u8;
-            let b = (y + 1.772 * u).round().clamp(0.0, 255.0) as u8;
-            let o = (j * w + i) * 3;
-            out[o] = r;
-            out[o + 1] = g;
-            out[o + 2] = b;
+    let clamp8 = |v: i32| v.clamp(0, 255) as u8;
+    for (j, (y_row, out_row)) in nv12[..w * h]
+        .chunks_exact(w)
+        .zip(out.chunks_exact_mut(w * 3))
+        .enumerate()
+    {
+        let uv_row = &nv12[uv_off + (j / 2) * w..][..w];
+        for (k, (y2, out6)) in y_row
+            .chunks_exact(2)
+            .zip(out_row.chunks_exact_mut(6))
+            .enumerate()
+        {
+            let (u, v) = (uv_row[k * 2] as i32 - 128, uv_row[k * 2 + 1] as i32 - 128);
+            let y0 = y2[0] as i32;
+            let y1 = y2[1] as i32;
+            out6.copy_from_slice(&[
+                clamp8(y0 + ((359 * v) >> 8)),
+                clamp8(y0 - ((88 * u + 183 * v) >> 8)),
+                clamp8(y0 + ((454 * u) >> 8)),
+                clamp8(y1 + ((359 * v) >> 8)),
+                clamp8(y1 - ((88 * u + 183 * v) >> 8)),
+                clamp8(y1 + ((454 * u) >> 8)),
+            ]);
         }
     }
     out

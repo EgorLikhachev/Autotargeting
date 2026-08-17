@@ -232,19 +232,35 @@ pub fn letterbox(rgb_src: &[u8], src_w: u32, src_h: u32) -> (Vec<u8>, LetterboxP
     // Inverse scale: target x → source x.
     let inv = if scale > 0.0 { 1.0 / scale } else { 0.0 };
 
-    for ty in 0..vis_h {
-        let sy = ((ty as f32) * inv).round() as u32;
-        let sy = sy.min(src_h.saturating_sub(1));
-        for tx in 0..vis_w {
-            let sx = ((tx as f32) * inv).round() as u32;
-            let sx = sx.min(src_w.saturating_sub(1));
-            let px = ((params.pad_y.round() as u32 + ty) as usize) * INPUT_SIZE as usize
-                + (params.pad_x.round() as u32 + tx) as usize;
-            let src_idx = (sy as usize * src_w as usize + sx as usize) * 3;
-            let dst_idx = px * 3;
-            out[dst_idx] = rgb_src[src_idx];
-            out[dst_idx + 1] = rgb_src[src_idx + 1];
-            out[dst_idx + 2] = rgb_src[src_idx + 2];
+    // Перф-аудит 2026-08: LUT исходных столбцов один раз на кадр вместо
+    // f32 mul+round на каждый пиксель; построчные chunks-копии без
+    // bounds-checks. Fast-path scale==1 (например, 640x640 на входе).
+    let src_w_us = src_w as usize;
+    let dst_w = INPUT_SIZE as usize;
+    let pad_x = params.pad_x.round() as usize;
+    let pad_y = params.pad_y.round() as usize;
+
+    if scale == 1.0 && vis_w as usize == src_w_us {
+        for ty in 0..vis_h as usize {
+            let dst_row = &mut out[(pad_y + ty) * dst_w * 3 + pad_x * 3..][..src_w_us * 3];
+            let src_row = &rgb_src[ty * src_w_us * 3..][..src_w_us * 3];
+            dst_row.copy_from_slice(src_row);
+        }
+        return (out, params);
+    }
+
+    // LUT: sx(tx) для каждого видимого столбца.
+    let sx_lut: Vec<u32> = (0..vis_w)
+        .map(|tx| (((tx as f32) * inv).round() as u32).min(src_w.saturating_sub(1)))
+        .collect();
+
+    for ty in 0..vis_h as usize {
+        let sy = (((ty as f32) * inv).round() as u32).min(src_h.saturating_sub(1)) as usize;
+        let src_row = &rgb_src[sy * src_w_us * 3..][..src_w_us * 3];
+        let dst_row = &mut out[(pad_y + ty) * dst_w * 3 + pad_x * 3..][..vis_w as usize * 3];
+        for (tx, dst_px) in dst_row.chunks_exact_mut(3).enumerate() {
+            let src_px = &src_row[sx_lut[tx] as usize * 3..][..3];
+            dst_px.copy_from_slice(src_px);
         }
     }
 
@@ -267,11 +283,20 @@ pub fn rgb_to_nchw_f32(rgb: &[u8]) -> Vec<f32> {
     );
     let mut out = vec![0f32; npix * 3];
     // Channel-first: R-plane, then G-plane, then B-plane.
-    let (r_off, g_off, b_off) = (0, npix, npix * 2);
-    for i in 0..npix {
-        out[r_off + i] = rgb[i * 3] as f32 / 255.0;
-        out[g_off + i] = rgb[i * 3 + 1] as f32 / 255.0;
-        out[b_off + i] = rgb[i * 3 + 2] as f32 / 255.0;
+    // Перф-аудит 2026-08: умножение на 1/255 вместо деления (f32 div ~10 тактов
+    // vs mul ~2-3), chunks-итераторы без индексной арифметики.
+    const INV_255: f32 = 1.0 / 255.0;
+    let (r_plane, rest) = out.split_at_mut(npix);
+    let (g_plane, b_plane) = rest.split_at_mut(npix);
+    for (((px, r), g), b) in rgb
+        .chunks_exact(3)
+        .zip(r_plane.iter_mut())
+        .zip(g_plane.iter_mut())
+        .zip(b_plane.iter_mut())
+    {
+        *r = px[0] as f32 * INV_255;
+        *g = px[1] as f32 * INV_255;
+        *b = px[2] as f32 * INV_255;
     }
     out
 }
@@ -346,31 +371,39 @@ pub fn postprocess(
     let h_row = &output[3 * num_anchors..4 * num_anchors];
     let class_rows = &output[4 * num_anchors..rows * num_anchors];
 
-    let mut cands: Vec<Candidate> = Vec::with_capacity(256);
-    for a in 0..num_anchors {
-        let cx = cx_row[a];
-        let cy = cy_row[a];
-        let w = w_row[a];
-        let h = h_row[a];
-
-        // Find best class over the per-class score rows for this anchor.
-        let mut best_id = 0u32;
-        let mut best_score = f32::NEG_INFINITY;
-        for c in 0..num_classes as usize {
-            let s = class_rows[c * num_anchors + a];
-            if s > best_score {
-                best_score = s;
-                best_id = c as u32;
+    // Классовый скан — ТРАНСПОНИРОВАННЫЙ (перф-аудит 2026-08): проходим
+    // строки классов последовательно (каждая — континуум 8400 f32), а не
+    // якорями со страйдом num_anchors (33.6 КБ — cache-miss на каждый
+    // класс-чтение). Лучший класс на якорь копим в компактные массивы
+    // (рабочий набор 2×33.6 КБ — L1/L2-резидент).
+    let mut best_score: Vec<f32> = vec![f32::NEG_INFINITY; num_anchors];
+    let mut best_id: Vec<u32> = vec![0; num_anchors];
+    for c in 0..num_classes as usize {
+        let row = &class_rows[c * num_anchors..(c + 1) * num_anchors];
+        for (a, &s) in row.iter().enumerate() {
+            if s > best_score[a] {
+                best_score[a] = s;
+                best_id[a] = c as u32;
             }
         }
+    }
+
+    let mut cands: Vec<Candidate> = Vec::with_capacity(256);
+    for a in 0..num_anchors {
         // Standard Ultralytics ONNX export has sigmoid baked in, so values are
         // already probabilities. Clamp to [0,1] defensively (some custom
         // exports forget the sigmoid; we don't silently suppress them but the
         // conf threshold will).
-        let conf = best_score.clamp(0.0, 1.0);
+        let conf = best_score[a].clamp(0.0, 1.0);
         if conf < conf_threshold {
             continue;
         }
+        // Box rows читаются только для прошедших порог (4 чтения на
+        // отброшенный якорь — в никуда).
+        let cx = cx_row[a];
+        let cy = cy_row[a];
+        let w = w_row[a];
+        let h = h_row[a];
         // Filter degenerate boxes (NaN / non-positive area) early.
         if !cx.is_finite() || !cy.is_finite() || w <= 0.0 || h <= 0.0 {
             continue;
@@ -380,7 +413,7 @@ pub fn postprocess(
             cy,
             w,
             h,
-            class_id: best_id,
+            class_id: best_id[a],
             confidence: conf,
         });
     }
