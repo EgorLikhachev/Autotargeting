@@ -350,11 +350,10 @@ mod multiprocess {
         let cfg = cfg(4);
         let prod = shmem_buffer::create_shared(&name, &cfg).expect("create");
 
-        for id in 1..=4u64 {
-            prod.publish(&pattern(&cfg, id), id).unwrap();
-        }
+        // Единственный кадр: consumer возьмёт его как latest и зависнет
+        // (hold 60 c). Его слот — id1%4=1 — цель следующей записи (id5).
+        prod.publish(&pattern(&cfg, 1), 1).unwrap();
 
-        // Потребитель, который берёт кадр и зависает (hold огромный).
         let mut child = std::process::Command::new(exe("shmem_consumer"))
             .args(["--name", &name, "--mode", "slow", "--hold-ms", "60000", "--seconds", "60"])
             .stdout(std::process::Stdio::null())
@@ -362,12 +361,19 @@ mod multiprocess {
             .expect("spawn slow");
         std::thread::sleep(Duration::from_millis(800)); // пусть возьмёт кадр
 
-        // Кадр умирающего держится → publish дропается.
+        // Кольцо заполняется свободными слотами (id2..4 → слоты 2,3,0)...
+        for id in 2..=4u64 {
+            assert!(
+                matches!(prod.publish(&pattern(&cfg, id), id).unwrap(), PublishResult::Published { .. }),
+                "free slot unexpectedly busy (id {id})"
+            );
+        }
+        // ...а id5 попадает в слот держателя → drop-new.
         match prod.publish(&pattern(&cfg, 5), 5).unwrap() {
             PublishResult::Dropped {
                 reason: DropReason::HeldByReaders { .. },
             } => {}
-            other => panic!("expected drop while crashed consumer holds: {other:?}"),
+            other => panic!("expected drop while consumer holds: {other:?}"),
         }
 
         // kill -9: guard не дропнется, ref_count утёкёт.
@@ -376,9 +382,9 @@ mod multiprocess {
         }
         let _ = child.wait();
 
-        // Всё ещё занято (утёкший счётчик).
+        // Утёкший счётчик всё ещё блокирует слот.
         assert!(matches!(
-            prod.publish(&pattern(&cfg, 6), 6).unwrap(),
+            prod.publish(&pattern(&cfg, 5), 5).unwrap(),
             PublishResult::Dropped { .. }
         ));
 
@@ -389,7 +395,7 @@ mod multiprocess {
 
         // Слот свободен — публикация проходит.
         assert!(matches!(
-            prod.publish(&pattern(&cfg, 7), 7).unwrap(),
+            prod.publish(&pattern(&cfg, 5), 5).unwrap(),
             PublishResult::Published { .. }
         ));
 
