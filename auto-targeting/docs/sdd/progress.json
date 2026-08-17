@@ -189,7 +189,8 @@
         "tests": "24/24 on x86 (15 unit + 7 acceptance + 2 doctest); clippy -D warnings clean",
         "acceptance_criteria": "7/7 verified (docs/HARDWARE_TEST_RESULTS.md §11.1)",
         "memory_budget": "default 10 x 640x480 NV12 = 4.4 MB (0.12% RAM); verified by test",
-        "multiprocess_linux": "PENDING — stand unreachable during acceptance (SSH reset->timeout while ICMP alive); run when device is back",
+        "multiprocess_linux": "PASS on RK3588: 25/25 tests incl. 2 multiprocess (torn-free) + crash-reaper; criterion: publish 460KB=18.0us (23.8 GiB/s), acquire+release=162ns, roundtrip=26.2us; live demo producer 30fps + next/slow consumers, TORN=0, clean unlink",
+        "pivot": "memfd+linkat disproven on target kernel (ENOENT/EXDEV, ctypes-probed) -> POSIX shm open(O_CREAT|O_EXCL), commit 982c88b",
         "branch": "feature/TG26-160-shmem-rust (6 commits)",
         "incidents_fixed_during_dev": [
           "publish() missing ref_count.store(0, Release) — slots stuck in WRITER_LOCK (hang)",

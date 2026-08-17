@@ -447,13 +447,34 @@ ffmpeg -framerate 5 -i output/live/frames/frame_%04d.jpg \
 (15 unit + 7 acceptance + 2 doctest), clippy `-D warnings` чист, весь
 набор — 0.01 с.
 
-**Orange Pi 5 (RK3588, нативная сборка aarch64):** см. статус ниже —
-прогон мультипроцессных тестов и criterion-бенча запланирован; устройства
-не было в сети в момент приёмки (см. §11.3).
+**Orange Pi 5 (RK3588, нативная сборка aarch64, 2026-08-18):**
 
-### 11.3 Инцидент доступности стенда (2026-08-18)
+| Проверка | Результат |
+|---|---|
+| Тесты: 16 lib (вкл. реальный SHM create/attach/unlink) + 9 acceptance (вкл. 2 мультипроцессных) | ✅ **25/25** |
+| `acceptance_multiprocess_two_consumers` — продюсер + next/slow потребители в отдельных процессах | ✅ TORN=0 у обоих |
+| `acceptance_crash_recovery_by_reaper` — kill -9 держателя → утёкший ref → ример → публикация возобновилась | ✅ |
+| Criterion: publish 640×480 NV12 (460 КБ) | **18.0 мкс = 23.8 GiB/s** (memcpy/DDR-bound) |
+| Criterion: acquire_latest + release (FrameGuard) | **162 нс** (цель < 1 мкс — перевыполнена ×6) |
+| Criterion: полный publish+consume roundtrip | 26.2 мкс |
+| Живое демо: продюсер 30 FPS × 12 с | published=358, dropped=0 |
+| — fast-consumer (`next`), параллельный процесс | VERIFIED=209, **TORN=0**, 1 catch-up прыжок |
+| — slow-consumer (`slow`, hold 250 мс — в 7× медленнее стрима) | VERIFIED=16, **TORN=0**, догнал до последнего |
+| Гигиена: сегмент после выхода продюсера | `/dev/shm` чист (unlink при Drop) |
 
-В момент аппаратной приёмки устройство перестало принимать SSH: сначала
-`Connection reset` (при живом ICMP), затем `Connection timed out` — TCP/22
-не отвечает, ping проходит. Продолжение аппаратных проверок (мультипроцесс,
-бенч) — после физической проверки/перезагрузки стенда.
+Вывод: протокол валиден на целевой платформе; накладные расходы пренебрежимы
+(18 мкс publish = 0.1% бюджета кадра при 60 FPS).
+
+### 11.3 Инциденты приёмки (2026-08-18)
+
+1. **Стенд недоступен ~20 минут**: SSH `Connection reset` → `Connection
+   timed out` при живом ICMP; восстановился сам. Причина не диагностирована
+   (кандидаты: троттлинг sshd после серии быстрых подключений; сеть).
+   Воспроизводимости нет.
+2. **`memfd + linkat(AT_EMPTY_PATH)` не работает на целевом ядре**
+   (6.1.99-rockchip): ENOENT на пустом oldpath, EXDEV через
+   `/proc/self/fd` (memfd — другая tmpfs-инстанция). Подтверждено ctypes-
+   зондом; реализация переведена на POSIX shm (`open /dev/shm`,
+   `O_CREAT|O_EXCL`) без изменения mmap/Region-кода (commit `982c88b`).
+3. Два timing/пути-фикса мультипроцессных тестов (поиск example-бинарника
+   по имени каталога `deps`; запас на холодный старт процесса).
