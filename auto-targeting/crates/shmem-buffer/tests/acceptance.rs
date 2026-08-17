@@ -268,13 +268,16 @@ mod multiprocess {
     use shmem_buffer::{attach_shared, now_ns, remove_segment};
 
     fn exe(name: &str) -> std::path::PathBuf {
-        // current_exe = target/<profile>/deps/<test-bin>; examples живут
-        // в target/<profile>/examples — один pop из deps/.
+        // cargo test: current_exe = target/<profile>/deps/<bin> — нужно
+        // два pop (bin, deps). При прямом запуске бинаря из <profile>/
+        // достаточно одного. Определяем по имени каталога.
         let mut p = std::env::current_exe().expect("exe path");
-        p.pop(); // deps/ -> target/<profile>/
+        p.pop(); // сам бинарь
+        if p.file_name().is_some_and(|s| s == "deps") {
+            p.pop(); // deps/ -> target/<profile>/
+        }
         p.push("examples");
         p.push(name);
-        eprintln!("[diag] spawning {} (exists={})", p.display(), p.exists());
         p
     }
 
