@@ -41,6 +41,7 @@ version = "0.2"
 optional = true
 
 [dev-dependencies]
+criterion = { workspace = true }
 tokio-test = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
