@@ -12,8 +12,13 @@ description = "Pure-Rust YOLOv8 preprocessing / postprocessing (letterbox, outpu
 common = { workspace = true }
 chrono = { workspace = true }
 
+[[bench]]
+name = "postprocess"
+harness = false
+
 [dev-dependencies]
 proptest = { workspace = true }
+criterion = { workspace = true }
 
 [lib]
 name = "yolov8"
