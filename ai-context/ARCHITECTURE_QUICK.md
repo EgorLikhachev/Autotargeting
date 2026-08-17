@@ -20,12 +20,16 @@ flowchart LR
 
 **Commander — единственный с правом отправлять команды FC.**
 
+Multi-consumer: кадры публикуются в SHM-кольцо (`shmem-buffer`, D-013) —
+детектор/трекер/рекордер читают zero-copy без шины сообщений.
+
 ## Крейты (10 + C++)
 
 | Крейт | Ответственность |
 |---|---|
 | `common` | доменные типы, ошибки, TOML-конфиг, сценарии |
 | `video-capture` | `VideoSource` trait + 4 реализации (Synthetic/Replay/V4l2 `v4l`/V4l2Direct `v4l2-direct`) + конвертация пикселей |
+| `shmem-buffer` | TG26-160: SPMC-кольцо кадров в SHM (memfd/mmap, NV12/RGB24, FrameGuard RAII, drop-new, ример) |
 | `yolov8` | letterbox + postprocess (чистая логика, без ONNX/RKNN) |
 | `cv-inference` | `InferenceBackend` trait + Mock + ONNX (cpu-onnx) + RknnBridgeClient (unix) |
 | `cv-visualizer` | headless bbox/labels → JPEG + JSONL |

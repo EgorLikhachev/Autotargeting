@@ -25,6 +25,7 @@ auto-targeting/                  # корень репо (GitHub front-door)
     │   ├── system-telemetry/    # RSS/temp/FPS/latency
     │   ├── target-tracker/      # Kalman + Hungarian multi-target
     │   ├── fc-adapter/          # MAVLink (Mock/SITL/ArduPilot)
+    │   ├── shmem-buffer/        # TG26-160: SPMC кольцо в SHM (memfd/mmap)
     │   ├── commander/           # StateMachine + anti-loop + PID + safety
     │   └── cli/                 # бинарь auto-targeting (REPL/scenario/health)
     ├── rknn-bridge/             # C++ микросервис NPU (CMake)
@@ -49,6 +50,8 @@ auto-targeting/                  # корень репо (GitHub front-door)
 | Direct capture bench | `video-capture/examples/direct_capture_bench.rs` | `cargo run -p video-capture --example direct_capture_bench --features v4l2-direct` |
 | Soak 30 min | `cv-inference/examples/soak.rs` | `./scripts/soak_30min.sh` |
 | rknn-bridge (C++) | `rknn-bridge/src/bridge_main.cpp` | `cd rknn-bridge/build && ./rknn-bridge` |
+| **SHM producer** | `shmem-buffer/examples/shmem_producer.rs` | `cargo run --release -p shmem-buffer --example shmem_producer -- --name demo.frames` |
+| **SHM consumer** | `shmem-buffer/examples/shmem_consumer.rs` | `... --example shmem_consumer -- --name demo.frames --mode next` |
 | SITL scenarios | `cli/src/scenario_runner.rs` | `cargo run -- scenario --all sim/scenarios/` |
 
 ## Ключевые файлы (для быстрой навигации)

@@ -1,0 +1,23 @@
+[package]
+name = "shmem-buffer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "SPMC ring buffer for video frames in shared memory (TG26-160)"
+
+[dependencies]
+common = { workspace = true }
+libc = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+clap = { workspace = true }
+
+[[bench]]
+name = "ring"
+harness = false

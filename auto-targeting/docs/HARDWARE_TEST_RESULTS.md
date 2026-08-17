@@ -420,3 +420,61 @@ ffmpeg -framerate 5 -i output/live/frames/frame_%04d.jpg \
   NPU 37.9 °C, `processed.mp4` собран.
 - По ходу теста исправлено 5 багов (S_PARM offsets, YUYV convert OOB,
   pump-цикл demo и др.) — см. CHANGELOG [Unreleased].
+
+---
+
+## 11. TG26-160: кольцевой буфер кадров в разделяемой памяти (2026-08-17/18)
+
+Крейт `shmem-buffer` (ADR D-013, ветка `feature/TG26-160-shmem-rust`).
+Подробности — [DEV_NOTES/shmem_ring_buffer.md](DEV_NOTES/shmem_ring_buffer.md).
+
+### 11.1 Проверка критериев готовности
+
+| # | Критерий (из задачи) | Проверка | Статус |
+|---|---|---|---|
+| 1 | Кадры в разделяемой памяти в согласованном формате | `acceptance_consistent_format_nv12` (NV12 = конвенция convert.rs) + shm-тест create/attach/drop на Linux | ✅ |
+| 2 | Кольцевой буфер настраиваемого размера | `acceptance_configurable_capacity` (3/10/32) | ✅ |
+| 3 | Доступны идентификатор, временная метка, размеры, формат | `acceptance_frame_metadata_complete` (+ конверсия в `FrameMetadata`) | ✅ |
+| 4 | Несколько независимых потребителей на один кадр | `acceptance_multi_consumer_no_overwrite...` (3 потребителя) + мультипроцессный тест (2 процесса) на Linux | ✅ |
+| 5 | Кадр не перезаписывается, пока используется | тот же тест: publish → `Dropped(HeldByReaders)`, данные держимого кадра неизменны | ✅ |
+| 6 | Поведение при медленном потребителе/заполненном буфере | `acceptance_slow_consumer_drop_new_semantics`: 20 дропов, продюсер не блокируется (<5 с), после отпускания — публикация сразу; политика drop-new задокументирована (D-013) | ✅ |
+| 7 | Несколько одновременных тестовых потребителей | `acceptance_concurrent_consumers_threads` (3 потока, torn-read детектор) + мультипроцесс (продюсер + next/slow потребители) на Linux | ✅ |
+| + | Объём памяти и производительность | `acceptance_segment_memory_budget` (дефолт 4.4 МБ); criterion-бенч — см. §11.2 | ✅ |
+
+### 11.2 Результаты на железе
+
+**x86-хост (Windows dev, арена — протокол идентичен SHM):** 24/24 теста
+(15 unit + 7 acceptance + 2 doctest), clippy `-D warnings` чист, весь
+набор — 0.01 с.
+
+**Orange Pi 5 (RK3588, нативная сборка aarch64, 2026-08-18):**
+
+| Проверка | Результат |
+|---|---|
+| Тесты: 16 lib (вкл. реальный SHM create/attach/unlink) + 9 acceptance (вкл. 2 мультипроцессных) | ✅ **25/25** |
+| `acceptance_multiprocess_two_consumers` — продюсер + next/slow потребители в отдельных процессах | ✅ TORN=0 у обоих |
+| `acceptance_crash_recovery_by_reaper` — kill -9 держателя → утёкший ref → ример → публикация возобновилась | ✅ |
+| Criterion: publish 640×480 NV12 (460 КБ) | **18.0 мкс = 23.8 GiB/s** (memcpy/DDR-bound) |
+| Criterion: acquire_latest + release (FrameGuard) | **162 нс** (цель < 1 мкс — перевыполнена ×6) |
+| Criterion: полный publish+consume roundtrip | 26.2 мкс |
+| Живое демо: продюсер 30 FPS × 12 с | published=358, dropped=0 |
+| — fast-consumer (`next`), параллельный процесс | VERIFIED=209, **TORN=0**, 1 catch-up прыжок |
+| — slow-consumer (`slow`, hold 250 мс — в 7× медленнее стрима) | VERIFIED=16, **TORN=0**, догнал до последнего |
+| Гигиена: сегмент после выхода продюсера | `/dev/shm` чист (unlink при Drop) |
+
+Вывод: протокол валиден на целевой платформе; накладные расходы пренебрежимы
+(18 мкс publish = 0.1% бюджета кадра при 60 FPS).
+
+### 11.3 Инциденты приёмки (2026-08-18)
+
+1. **Стенд недоступен ~20 минут**: SSH `Connection reset` → `Connection
+   timed out` при живом ICMP; восстановился сам. Причина не диагностирована
+   (кандидаты: троттлинг sshd после серии быстрых подключений; сеть).
+   Воспроизводимости нет.
+2. **`memfd + linkat(AT_EMPTY_PATH)` не работает на целевом ядре**
+   (6.1.99-rockchip): ENOENT на пустом oldpath, EXDEV через
+   `/proc/self/fd` (memfd — другая tmpfs-инстанция). Подтверждено ctypes-
+   зондом; реализация переведена на POSIX shm (`open /dev/shm`,
+   `O_CREAT|O_EXCL`) без изменения mmap/Region-кода (commit `982c88b`).
+3. Два timing/пути-фикса мультипроцессных тестов (поиск example-бинарника
+   по имени каталога `deps`; запас на холодный старт процесса).
