@@ -23,7 +23,6 @@ pub fn segment_path(name: &str) -> String {
 mod imp {
     use super::*;
     use std::ptr::NonNull;
-    use std::sync::Arc;
 
     use crate::layout::segment_size;
     use crate::ring::Backing;

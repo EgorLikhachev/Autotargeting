@@ -359,7 +359,8 @@ mod multiprocess {
             .stdout(std::process::Stdio::null())
             .spawn()
             .expect("spawn slow");
-        std::thread::sleep(Duration::from_millis(800)); // пусть возьмёт кадр
+        // Холодный старт процесса на нагруженном стенде >800 мс — берём запас.
+        std::thread::sleep(Duration::from_millis(2500));
 
         // Кольцо заполняется свободными слотами (id2..4 → слоты 2,3,0)...
         for id in 2..=4u64 {
