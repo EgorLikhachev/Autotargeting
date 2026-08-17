@@ -265,7 +265,7 @@ fn acceptance_segment_memory_budget() {
 #[cfg(target_os = "linux")]
 mod multiprocess {
     use super::*;
-    use shmem_buffer::{attach_shared, remove_segment};
+    use shmem_buffer::{attach_shared, now_ns, remove_segment};
 
     fn exe(name: &str) -> std::path::PathBuf {
         // current_exe = target/<profile>/deps/<test-bin>; examples живут
