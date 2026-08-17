@@ -12,6 +12,14 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`shmem-buffer` crate (TG26-160)**: SPMC ring buffer for video frames in
+  shared memory — memfd + linkat(/dev/shm) + mmap on Linux, in-process arena
+  anywhere else; NV12 (default) / RGB24 storage; lock-free single-word
+  CAS protocol per slot; `FrameGuard` RAII (no overwrite while held);
+  drop-new policy on full buffer (never blocks the producer); stale-slot
+  reaper for crashed consumers. 15 unit + 7 acceptance tests, criterion
+  bench, producer/consumer/reaper examples. ADR D-013,
+  docs/DEV_NOTES/shmem_ring_buffer.md (incl. incident post-mortem).
 - **Alternative camera validated: Sony PlayStation Eye** (OV534+OV7721,
   non-UVC, YUYV-only) — out-of-tree `gspca_ov534` kernel module built and
   installed on the stand; formats up to 640×480@60 and 320×240@187 confirmed;

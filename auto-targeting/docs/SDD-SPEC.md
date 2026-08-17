@@ -900,7 +900,7 @@ P2 (улучшение).
 | # | Расхождение | Приоритет | Статус | Где |
 |---|---|---|---|---|
 | 1 | **Endianness length-prefix** (C++ native ↔ Rust big-endian) | P0 | ✅ **Fixed** (D-002) | `shm_server.cpp:87-92,132-133` (htonl/ntohl) |
-| 2 | **SCM_RIGHTS не реализован** — `receive_frame()` stub, frame идёт base64 | P1 | Open | `shm_server.cpp:99-113`, `bridge_client.rs:395` |
+| 2 | **SCM_RIGHTS не реализован** — `receive_frame()` stub, frame идёт base64 | P1 | Open — фундамент заложен крейтом `shmem-buffer` (D-013: memfd готов к передаче через SCM_RIGHTS); интеграция bridge — отдельная задача | `shm_server.cpp:99-113`, `bridge_client.rs:395` |
 | 3 | **Crude coordinate transform** — `offset_x→east, offset_y→down` напрямую (должно быть через `CameraToAngular`) | P1 | Open | `commander/src/commander.rs:451-458` |
 | 4 | **Упрощённый Kalman** — fixed-gain вместо 4×4 covariance | P2 | Open | `target-tracker/src/kalman.rs:79-82` |
 | 5 | **`select_target` без confirmation** — сразу `TargetSelected→Tracking`, без ожидания `lock_confirmation_frames` | P2 | Open | `commander/src/commander.rs:254-258` |
