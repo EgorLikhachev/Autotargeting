@@ -40,12 +40,17 @@ fn bench_yolov8(c: &mut Criterion) {
     let output = synthetic_output(42);
 
     c.bench_function("postprocess_8400_conf035", |b| {
+        let params = yolov8::LetterboxParams::for_size(640, 480);
         b.iter(|| {
             black_box(yolov8::postprocess(
                 black_box(&output),
+                black_box(80),
+                black_box(8400),
+                black_box(params),
                 black_box(0.35),
                 black_box(0.45),
-                black_box(1.0),
+                black_box(1),
+                black_box(chrono::Utc::now()),
             ))
         })
     });
