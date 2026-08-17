@@ -1,13 +1,15 @@
-//! Разделяемая память: memfd + mmap (Linux) и заглушка для других хостов.
+//! Разделяемая память: POSIX shm + mmap (Linux) и заглушка для других хостов.
 //!
-//! Именование сегментов: `memfd_create` создаёт анонимный inode; для
-//! подключения потребителей из других процессов он линкуется в tmpfs через
-//! `linkat(fd, "", AT_FDCWD, "/dev/shm/<name>", AT_EMPTY_PATH)` — для
-//! memfd это разрешено без `CAP_DAC_READ_SEARCH` (man memfd_create(2)).
-//! attach = `open("/dev/shm/<name>")` + `mmap(MAP_SHARED)`.
+//! Именование сегментов: объект в `/dev/shm/<name>` (POSIX shared memory
+//! семантика — прямой `open`, без libc-символа shm_open). Изначально
+//! планировался `memfd_create` + `linkat(AT_EMPTY_PATH)`, но на целевом
+//! ядре (6.1.99-rockchip) это эмпирически НЕ работает: AT_EMPTY_PATH
+//! возвращает ENOENT, а хардлинк через /proc/self/fd — EXDEV (memfd живёт
+//! на другой tmpfs-инстанции). `open("/dev/shm/...")` решает задачу
+//! без этих ограничений; mmap-часть и Region не меняются.
 //!
-//! Деструктор `FrameProducer` удаляет линк; сами отображения живут, пока
-//! живы `Arc<Region>` (включая активные `FrameGuard`).
+//! Деструктор `FrameProducer` удаляет объект (unlink); сами отображения
+//! живут, пока живы `Arc<Region>` (включая активные `FrameGuard`).
 
 use crate::ring::{FrameConsumer, FrameProducer, RingConfig, RingError};
 
@@ -36,40 +38,35 @@ mod imp {
         let c_path = std::ffi::CString::new(path.as_str())
             .map_err(|_| RingError::InvalidConfig("path contains NUL".into()))?;
 
-        // memfd + печать (allow-sealing не нужна, но флаг безвреден и точнее
-        // выражает «изменяемый файл в памяти»).
-        let fd = unsafe { libc::memfd_create(c_name.as_ptr(), libc::MFD_CLOEXEC) };
+        // POSIX shm: O_CREAT|O_EXCL в /dev/shm. EEXIST → сегмент уже есть
+        // (stale после крэша продюсера) — caller решает (remove_segment).
+        // (memfd+linkat(AT_EMPTY_PATH) не работает на целевом ядре:
+        // ENOENT/EXDEV — см. док-коммент модуля.)
+        let fd = unsafe {
+            libc::open(
+                c_path.as_ptr(),
+                libc::O_RDWR | libc::O_CREAT | libc::O_EXCL | libc::O_CLOEXEC,
+                0o600,
+            )
+        };
         if fd < 0 {
-            return Err(RingError::Shm(format!(
-                "memfd_create: {}",
-                std::io::Error::last_os_error()
-            )));
+            let e = std::io::Error::last_os_error();
+            if e.raw_os_error() == Some(libc::EEXIST) {
+                return Err(RingError::SegmentExists(name.to_string()));
+            }
+            return Err(RingError::Shm(format!("open({path}): {e}")));
         }
+        let _ = c_name;
 
         let len = segment_size(cfg.capacity, cfg.frame_size());
         if unsafe { libc::ftruncate(fd, len as libc::off_t) } != 0 {
             let e = std::io::Error::last_os_error();
-            unsafe { libc::close(fd) };
-            return Err(RingError::Shm(format!("ftruncate: {e}")));
-        }
-
-        // Оубликовать под именем. EEXIST → сегмент уже есть.
-        if unsafe {
-            libc::linkat(
-                fd,
-                b"\0".as_ptr().cast(),
-                libc::AT_FDCWD,
-                c_path.as_ptr(),
-                libc::AT_EMPTY_PATH,
-            )
-        } != 0
-        {
-            let e = std::io::Error::last_os_error();
-            unsafe { libc::close(fd) };
-            if e.raw_os_error() == Some(libc::EEXIST) {
-                return Err(RingError::SegmentExists(name.to_string()));
+            unsafe {
+                libc::close(fd);
+                // Не оставляем мусорный объект.
+                libc::unlink(c_path.as_ptr());
             }
-            return Err(RingError::Shm(format!("linkat: {e}")));
+            return Err(RingError::Shm(format!("ftruncate: {e}")));
         }
 
         // mmap обнулённого файла: ftruncate гарантировал нули.
