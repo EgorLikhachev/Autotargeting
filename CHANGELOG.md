@@ -12,6 +12,14 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **Performance audit & optimization pass** (docs/PERF_AUDIT_2026-08.md,
+  A/B on RK3588): rgb24_to_nv12 ×9.1, yuyv_to_rgb24 ×7.9, yuyv_to_nv12
+  ×2.4, letterbox ×11.3, rgb_to_nchw ×1.6, postprocess ×1.26 — total CPU
+  stages of the RGB path ×2.9 (9.87 → 3.44 ms/frame @640x480). Integer
+  BT.601 fixed-point (+/-1 vs f32 reference, consistency test added),
+  chunk iterators, transposed class scan, letterbox LUT, branch-free
+  base64, per-frame alloc trims. Criterion baseline benches for
+  convert/yolov8 hot paths.
 - **`shmem-buffer` crate (TG26-160)**: SPMC ring buffer for video frames in
   shared memory — memfd + linkat(/dev/shm) + mmap on Linux, in-process arena
   anywhere else; NV12 (default) / RGB24 storage; lock-free single-word
