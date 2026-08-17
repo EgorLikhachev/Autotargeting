@@ -11,6 +11,7 @@ members = [
     "crates/fc-adapter",
     "crates/commander",
     "crates/cli",
+    "crates/shmem-buffer",
 ]
 
 [workspace.package]
@@ -53,6 +54,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Image processing
 jpeg-decoder = "0.3"
 
+# FFI (shm ioctls, memfd)
+libc = "0.2"
+
 # HTTP server (for health endpoint)
 axum = "0.7"
 tower = "0.5"
@@ -79,6 +83,7 @@ system-telemetry = { path = "crates/system-telemetry", version = "0.1.0" }
 target-tracker = { path = "crates/target-tracker", version = "0.1.0" }
 fc-adapter = { path = "crates/fc-adapter", version = "0.1.0" }
 commander = { path = "crates/commander", version = "0.1.0" }
+shmem-buffer = { path = "crates/shmem_buffer", version = "0.1.0" }
 
 # Test deps (applied via [dev-dependencies] in each crate)
 proptest = "1.4"
