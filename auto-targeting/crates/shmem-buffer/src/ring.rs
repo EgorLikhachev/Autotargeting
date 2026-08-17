@@ -95,7 +95,7 @@ impl RingConfig {
         layout_frame_size(self.format.code(), self.width, self.height)
             .expect("RingConfig validated at construction")
     }
-    fn validate(&self) -> Result<(), RingError> {
+    pub(crate) fn validate(&self) -> Result<(), RingError> {
         if self.capacity == 0 || self.capacity > 4096 {
             return Err(RingError::InvalidConfig("capacity must be 1..=4096".into()));
         }
