@@ -51,6 +51,7 @@ fn bench_yolov8(c: &mut Criterion) {
                 black_box(0.45),
                 black_box(1),
                 black_box(chrono::Utc::now()),
+                black_box(&yolov8::COCO_LABELS),
             ))
         })
     });
