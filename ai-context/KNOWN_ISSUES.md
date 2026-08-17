@@ -7,7 +7,7 @@
 | # | Расхождение | Приоритет | Статус | Где |
 |---|---|---|---|---|
 | 1 | **Endianness length-prefix** (C++ native ↔ Rust big-endian) | P0 | ✅ fixed (D-002) | `shm_server.cpp` (htonl/ntohl) |
-| 2 | **SCM_RIGHTS не реализован** — frame идёт base64 inline | P1 | Open | `shm_server.cpp`, `bridge_client.rs` |
+| 2 | **SCM_RIGHTS не реализован** — frame идёт base64 inline | P1 | Open (фундамент: крейт shmem-buffer, D-013 — memfd готов к передаче; интеграция bridge — отдельная задача) | `shm_server.cpp`, `bridge_client.rs` |
 | 3 | **Crude coordinate transform** — `offset_x→east, offset_y→down` напрямую | P1 | Open | `commander.rs:451` |
 | 4 | **Упрощённый Kalman** — fixed-gain вместо 4×4 covariance | P2 | Open | `kalman.rs:79` |
 | 5 | **`select_target` без confirmation** — сразу Tracking без `lock_confirmation_frames` | P2 | Open | `commander.rs:254` |

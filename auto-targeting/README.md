@@ -16,6 +16,7 @@ Rust workspace + C++ `rknn-bridge` microservice for the Auto-Targeting System
 - ✅ C++ `rknn-bridge`: **6 NMS tests**, linked to `librknnrt.so` 2.3.0
 - ✅ End-to-end detections on RK3588 NPU (zero-copy, **~29 ms** inference, **~34 FPS**)
 - ✅ Live camera demo → annotated video (`examples/live_camera_demo.rs`)
+- ✅ SHM ring buffer for multi-consumer frames (`shmem-buffer`, TG26-160: 24/24 tests, ADR D-013)
 - ✅ Anti-loop protection: state machine, watchdogs, deadband, rate limiter, oscillation detector
 - ✅ `MockFcAdapter` (in-memory) + `SittlMavlinkAdapter` (UDP MAVLink) — both working
 - 🚧 `ArduPilotMavlinkAdapter` is still a stub (real FC integration = Phase 2)
@@ -148,6 +149,7 @@ auto-targeting/
 │   ├── yolov8/           # pure-Rust letterbox + postprocess (NMS)
 │   ├── cv-visualizer/    # headless annotation (boxes + labels → JPEG/JSONL)
 │   ├── system-telemetry/ # RSS, CPU/NPU temp, latency p50/p95
+│   ├── shmem-buffer/     # TG26-160: SPMC frame ring in shared memory (memfd)
 │   ├── target-tracker/   # KalmanFilter2D + single-target tracker (Phase 1.2)
 │   ├── fc-adapter/       # FlightControllerAdapter trait + Mock + SITL MAVLink
 │   ├── commander/        # state machine + watchdogs + anti-loop guard
