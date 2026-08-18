@@ -1009,6 +1009,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "detector"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "common",
+ "cv-inference",
+ "event-bus",
+ "serde",
+ "serde_json",
+ "shmem-buffer",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "video-capture",
+ "yolov8",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
