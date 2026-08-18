@@ -383,9 +383,9 @@ impl Recorder {
                 match consumer.next_after(*last) {
                     NextStep::Frame(g) => {
                         *last = g.frame_id();
-                        return Some(g);
+                        Some(g)
                     }
-                    NextStep::UpToDate => return None,
+                    NextStep::UpToDate => None,
                     NextStep::TooFarBehind { latest, .. } => {
                         stats.jumps += 1;
                         *last = latest;
@@ -394,7 +394,7 @@ impl Recorder {
                             *last = g.frame_id();
                             return Some(g);
                         }
-                        return None;
+                        None
                     }
                 }
             },
@@ -418,8 +418,7 @@ mod tests {
 
     #[test]
     fn fps_zero_rejected() {
-        let mut cfg = RecorderConfig::default();
-        cfg.fps = 0;
+        let cfg = RecorderConfig { fps: 0, ..RecorderConfig::default() };
         assert!(Recorder::new(cfg).is_err());
     }
 
