@@ -41,7 +41,7 @@ pub use v4l2_stub::{device_exists, list_v4l2_devices, query_formats, DeviceProbe
 #[cfg(feature = "v4l2")]
 pub use v4l2_real::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
 
-#[cfg(feature = "v4l2-direct")]
+#[cfg(all(feature = "v4l2-direct", target_os = "linux"))]
 pub use v4l2_direct::V4l2DirectSource;
 
 /// Re-export common frame types for convenience.

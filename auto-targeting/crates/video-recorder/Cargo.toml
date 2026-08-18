@@ -20,6 +20,14 @@ clap = { workspace = true }
 image = { version = "0.25", default-features = false }
 ab_glyph = "0.2"
 
+[features]
+default = []
+# Direct V4L2 capture for the camera_publisher example (PS Eye/gspca
+# requires the direct ioctl path; the v4l crate hangs on it).
+v4l2-direct-cam = ["video-capture/v4l2-direct"]
+
 [dev-dependencies]
+video-capture = { workspace = true, features = ["v4l2-direct"] }
+tokio = { workspace = true }
 criterion = { workspace = true }
 tempfile = "3.10"
