@@ -27,7 +27,7 @@
 //!     ..Default::default()
 //! };
 //! let consumer = video_recorder::attach(&cfg.segment)?;
-//! let stats = video_recorder::Recorder::new(cfg).run(&consumer)?;
+//! let stats = video_recorder::Recorder::new(cfg)?.run(&consumer)?;
 //! println!("written={}, jumps={}", stats.frames_written, stats.jumps);
 //! # Ok(()) }
 //! ```
