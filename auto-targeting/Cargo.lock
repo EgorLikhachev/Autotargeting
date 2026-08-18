@@ -5144,6 +5144,7 @@ dependencies = [
  "common",
  "criterion",
  "cv-visualizer",
+ "event-bus",
  "image",
  "shmem-buffer",
  "tempfile",

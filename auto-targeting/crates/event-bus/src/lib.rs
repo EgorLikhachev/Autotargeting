@@ -358,6 +358,12 @@ impl EventBus {
         self.subscriber(topics::TRACKS).await
     }
 
+    /// Доступ к сырой zenoh-сессии (утилиты вроде bus_dump).
+    #[must_use]
+    pub fn session(&self) -> &zenoh::Session {
+        &self.session
+    }
+
     /// Graceful-закрытие сессии.
     pub async fn close(self) -> Result<(), BusError> {
         self.session.close().await.map_err(zerr)

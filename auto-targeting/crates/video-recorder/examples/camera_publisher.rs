@@ -11,6 +11,22 @@
 //! PS Eye (gspca): только `--format yuyv` и `--backend` всегда direct
 //! (v4l-crate зависает на gspca). Arducam: `--format mjpeg`.
 
+/// M1: статус camera_publisher на шине (at/status/camera).
+#[cfg(feature = "v4l2-direct-cam")]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+struct CameraStatus {
+    v: u8,
+    device: String,
+    width: u32,
+    height: u32,
+    fps_target: u32,
+    format: String,
+    fps_actual: f32,
+    published: u64,
+    dropped: u64,
+    convert_errors: u64,
+}
+
 #[cfg(feature = "v4l2-direct-cam")]
 fn main() {
     use clap::Parser;
@@ -36,6 +52,9 @@ fn main() {
         /// Формат захвата: yuyv (PS Eye) | mjpeg (Arducam).
         #[arg(long, default_value = "yuyv")]
         format: String,
+        /// Endpoint шины zenoh для публикации at/status/camera (пусто — выкл).
+        #[arg(long)]
+        bus: Option<String>,
     }
 
     let args = Args::parse();
@@ -68,12 +87,31 @@ fn main() {
         Err(e) => panic!("create_shared: {e}"),
     };
 
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_time()
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
         .build()
         .expect("tokio rt");
     rt.block_on(async {
         use video_capture::{VideoSource, V4l2DirectSource};
+
+        // M1: статус на шину (опционально).
+        let status_pub = match &args.bus {
+            Some(ep) => match event_bus::EventBus::connect(ep).await {
+                Ok(bus) => {
+                    let p = bus
+                        .publisher::<CameraStatus>(&event_bus::topics::status("camera"))
+                        .await
+                        .ok();
+                    Some((bus, p))
+                }
+                Err(e) => {
+                    eprintln!("[warn] bus connect failed: {e}");
+                    None
+                }
+            },
+            None => None,
+        };
 
         let mut src = V4l2DirectSource::new(&args.device, args.width, args.height, args.fps)
             .with_format(src_format)
@@ -89,8 +127,13 @@ fn main() {
 
         let deadline =
             std::time::Instant::now() + std::time::Duration::from_secs(args.seconds);
+        let mut convert_errors: u64 = 0;
+        let mut window_frames: u64 = 0;
+        let mut window_start = std::time::Instant::now();
+        let mut last_status = std::time::Instant::now();
         while std::time::Instant::now() < deadline {
             let Some(frame) = rx.recv().await else { break };
+            window_frames += 1;
             // Конверсия в NV12 — формат хранения кольца.
             let nv12 = match src_format {
                 common::PixelFormat::Yuyv => video_capture::yuyv_to_nv12(&frame),
@@ -100,6 +143,7 @@ fn main() {
             let nv12 = match nv12 {
                 Ok(f) => f,
                 Err(e) => {
+                    convert_errors += 1;
                     eprintln!("[warn] convert: {e}");
                     continue;
                 }
@@ -114,8 +158,52 @@ fn main() {
                     break;
                 }
             }
+
+            // M1: статус раз в секунду.
+            if last_status.elapsed() >= std::time::Duration::from_secs(1) {
+                let s = producer.stats();
+                let secs = window_start.elapsed().as_secs_f32();
+                let fps = if secs > 0.0 { window_frames as f32 / secs } else { 0.0 };
+                if let Some((_, Some(p))) = &status_pub {
+                    let st = CameraStatus {
+                        v: event_bus::CONTRACT_VERSION,
+                        device: args.device.clone(),
+                        width: args.width,
+                        height: args.height,
+                        fps_target: args.fps,
+                        format: args.format.clone(),
+                        fps_actual: fps,
+                        published: s.published,
+                        dropped: s.dropped,
+                        convert_errors,
+                    };
+                    let _ = p.publish(&st).await;
+                }
+                window_frames = 0;
+                window_start = std::time::Instant::now();
+                last_status = std::time::Instant::now();
+            }
         }
         let _ = src.stop().await;
+
+        // Финальный статус.
+        if let Some((bus, Some(p))) = status_pub {
+            let s = producer.stats();
+            let st = CameraStatus {
+                v: event_bus::CONTRACT_VERSION,
+                device: args.device.clone(),
+                width: args.width,
+                height: args.height,
+                fps_target: args.fps,
+                format: args.format.clone(),
+                fps_actual: 0.0,
+                published: s.published,
+                dropped: s.dropped,
+                convert_errors,
+            };
+            let _ = p.publish(&st).await;
+            let _ = bus.close().await;
+        }
     });
 
     let s = producer.stats();

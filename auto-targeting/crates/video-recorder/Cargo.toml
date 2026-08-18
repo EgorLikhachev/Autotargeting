@@ -12,6 +12,7 @@ common = { workspace = true }
 shmem-buffer = { workspace = true }
 video-capture = { workspace = true }
 cv-visualizer = { workspace = true }
+event-bus = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
