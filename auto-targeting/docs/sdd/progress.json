@@ -255,6 +255,19 @@
         "m1": "bus_dump observer (at/**); camera_publisher --bus -> at/status/camera (fps_actual 31.98, 483 published, 0 drops); video-recorder --bus -> at/status/recorder (315 frames, recording flag); both statuses visible to bus_dump on the stand"
       },
       "report": "docs/HARDWARE_TEST_RESULTS.md §15"
+    },
+    {
+      "step": "H10",
+      "name": "Bus migration M2: tracker component (detections in, tracks out)",
+      "status": "completed",
+      "completed_at": "2026-08-18",
+      "device": "RK3588 full live contour: camera->detector(NPU)->tracker->bus",
+      "results": {
+        "crate": "tracker-crate (15th): at/detections -> MultiTargetTracker (Kalman+Hungarian) -> at/tracks (TrackMsg) + at/status/tracker",
+        "live": "tracks + status observed by bus_dump; 240 frames/266k detections from int8 model -> 1200 active tracks (~1 tracker fps under over-detect; trivial at normal detection rates)",
+        "tests": "2/2 on x86 and ARM: moving target -> one stable track id; two targets -> exactly two tracks"
+      },
+      "report": "docs/HARDWARE_TEST_RESULTS.md §16"
     }
   ]
 }

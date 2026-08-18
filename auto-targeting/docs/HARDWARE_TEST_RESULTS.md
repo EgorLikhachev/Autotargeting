@@ -581,3 +581,43 @@ at/status/recorder {"v":1,"frames_written":315,"jumps":1,
 | camera: fps_actual ≈ 32 (target 30), 483 published, 0 дропов | ✅ |
 | recorder: 315 кадров записано, OSD 315, статус recording→false | ✅ |
 | MP4 артефакт | /tmp/m1_rec.mp4, 329 КБ |
+
+---
+
+## 16. M2: трекер на шине — детекции → треки (2026-08-18)
+
+Крейт `tracker-crate` (бинарь `tracker`, ветка `feature/bus-migration-m2-tracker`).
+Первый компонент-**потребитель** шины: полный цикл детектор → трекер.
+
+### 16.1 Живой контур (RK3588)
+
+`camera_publisher` (Vitade MJPG 640×480@30) → `detector` (NPU, 9.9 FPS,
+240 кадров/266 531 детекций) → **`tracker`** → `at/tracks` + `at/status/tracker`
+(наблюдалось `bus_dump`):
+
+```text
+at/tracks {"v":1,"track_id":884,"frame_seq":111,
+  "bbox":{"x":142,"y":252,"width":50,"height":60},
+  "vx":0.0,"vy":0.0,"class":"person","class_id":0,
+  "confidence":0.5,"age":0,"misses":0}
+at/status/tracker {"v":1,"frames_in":19,"tracks_published":22921,
+  "active_tracks":1207,"fps":1.0}
+```
+
+| Проверка | Результат |
+|---|---|
+| Подписка at/detections → публикация at/tracks | ✅ (bus_dump) |
+| Контракт TrackMsg (id/bbox/velocity/class/frame_seq) | ✅ |
+| Статус компонента | ✅ frames_in/tracks_published/active/fps |
+| Тесты x86 + ARM | ✅ 2/2 (движущаяся цель → 1 трек; 2 цели → 2 трека) |
+| FPS трекера | ~1.0 (1200 треков/кадр — over-detect модели; см. ниже) |
+
+### 16.2 Наблюдения
+
+- Трекер потребляет ~1 FPS при 1200 активных треках: публикация TrackMsg
+  на каждый трек × каждый кадр даёт 9623 сообщений за 8 кадров. При
+  нормальной модели (≤10 детекций/кадр) бюджет тривиален.
+- Over-detect int8-модели (conf=0.5 у 96% детекций) — главный ограничитель
+  полезности треков; фиксирование порога/калибровка — вне M2
+  (KNOWN_ISSUES №7/8).
+- Треки стабильны: один движущийся объект → один track_id (тест).
