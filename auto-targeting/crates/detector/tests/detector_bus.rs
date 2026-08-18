@@ -72,7 +72,7 @@ async fn detector_publishes_detections_from_ring_to_bus() {
     assert_eq!(event.frame_w, W);
     assert_eq!(event.frame_h, H);
     assert!(event.frame_seq >= 1, "frame_seq must be a ring frame id");
-    assert_eq!(event.captured_at.timestamp_millis() > 0, true);
+    assert!(event.captured_at.timestamp_millis() > 0);
     // bbox/class/conf присутствуют в типе; mock может дать пустой вектор —
     // тогда контракт проверяем сериализацией поля.
     let js = serde_json::to_value(&event).unwrap();
