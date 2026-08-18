@@ -1,6 +1,9 @@
 # Заметки по разработке: шина событий на Zenoh (D-014)
 
 **Дата:** 2026-08-18 · **Крейт:** `crates/event-bus` · **Исследование:** [BUS_SELECTION.md](../BUS_SELECTION.md)
+**Статус миграции:** детектор (TG26-35) работает через шину в боевом
+контуре — `at/detections` + `at/status/detector`. Полный план перевода
+остальных компонентов — [BUS_MIGRATION_PLAN.md](../BUS_MIGRATION_PLAN.md).
 
 ## 1. Что реализовано
 
