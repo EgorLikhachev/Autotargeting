@@ -28,7 +28,7 @@
 | Реализация (версия 2026) | Язык/ядро | Транспорт/топология | Паттерны | IPC-латентность* | Футпринт* | Rust API | Лицензия | Активность |
 |---|---|---|---|---|---|---|---|---|
 | **ROS 2** (Kilted/Lyrical) + **rclrs** | C++ (rcl) + Rust-клиент | DDS (UDP/multicast + SHM у部分 RMW); pub/sub граф | pub/sub, srv, actions, params | ~50–500 мкс (SHM), выше по UDP; DDS-настройки капризны | сотни МБ (дистрибутив), десятки МБ на процесс | rclrs — официальный, но **out-of-tree** (собирается colcon поверх дистро) | Apache-2.0 | высокая (Open Robotics) |
-| **Zenoh** 1.3.x | **чистый Rust** | TCP/UDP/IPC/unix-сокет + **SHM**; peer-to-peer **без брокера** (или router zenohd) | pub/sub, query, storage | ~5–10 мкс (SHM/IPC), десятки мкс TCP | единицы МБ на peer (pico <50 КБ для MCU) | `zenoh` — первоклассный (crate written in Rust), tokio | EPL-2.0 **или** Apache-2.0 (dual) | очень высокая (Eclipse/ZettaScale, rmw_zenoh в ROS2) |
+| **Zenoh** 1.9.x | **чистый Rust**; офиц. биндинги **zenoh-c (C)** и **zenoh-cpp (header-only, поверх zenoh-c/zenoh-pico)**, версии 1.9.0 (апр. 2026) | TCP/UDP/IPC/unix-сокет + **SHM**; peer-to-peer **без брокера** (или router zenohd) | pub/sub, query, storage | ~5–10 мкс (SHM/IPC), десятки мкс TCP | единицы МБ на peer (pico <50 КБ для MCU) | `zenoh` — первоклассный (crate written in Rust), tokio | EPL-2.0 **или** Apache-2.0 (dual) | очень высокая (Eclipse/ZettaScale, rmw_zenoh в ROS2) |
 | **iceoryx2** 0.9.x | **чистый Rust** (C/C++ биндинги) | **только SHM** на хосте (TCP в планах); сервис-ориентированный | pub/sub (zero-copy), event, request/response (черновик) | **~1 мкс и ниже** (zero-copy, lock-free) | единицы МБ, нет сети-стека | `iceoryx2` — native Rust; API до 1.0 нестабилен | Apache-2.0 | высокая (Eclipse, ekxide; v0.9 — embedded-пуш) |
 | **ZeroMQ**: libzmq + `zmq2` (FFI) | C (libzmq) + Rust-обёртка | TCP/IPC/unix/inproc; нет discovery | PUB/SUB, REQ/REP, PUSH/PULL, PIPELINE | десятки мкс (IPC) | libzmq ~1 МБ + обёртка; C-зависимость (cc/cmake) | `zmq2` (поддерживаемый форк `zmq`); sync | MPL-2.0 (libzmq) | libzmq — стабильная классика, низкая динамика |
 | **ZeroMQ**: `zeromq` (zmq.rs) | чистый Rust | TCP/IPC; часть паттернов | REQ/REP, PUB/SUB, PUSH/PULL, XPUB/XSUB | десятки мкс | малый | async (tokio), **медленно развивается** (0.4→0.6 годами) | Apache-2.0 | низкая |
@@ -58,7 +58,11 @@ unix-сокет/SHM-транспорт на хосте); pub/sub + query (для
 «последнее значение»); латентность единицы–десятки мкс; dual-лицензия
 Apache-2.0 доступна; движется очень активно; проверен роботикой (официальный
 rmw_zenoh, PX4-мосты); хорошо документирован; Windows поддерживается.
-**Минусы:** young-ish API (1.x стабилен, но экосистема младше ROS);
+**Плюсы (для C++-компонентов):** официальные биндинги — zenoh-c (C API,
+свежие релизы 1.8/1.9.0, март–апрель 2026) и zenoh-cpp (header-only,
+поверх zenoh-c и zenoh-pico; с 1.0 API зеркалит Rust-версию; есть
+Yocto/OE-рецепты); rknn-bridge сможет говорить на шине напрямую.
+**Минусы:** young-ish API (1.x стабилен, но экосистема младше ROS); zenoh-cpp заявлен «under active development» (возможны ломки minor-версий);
 крейт-дерево немаленькое (~50 транзитивных) — vendoring-лок больше;
 продвинутые фичи (storage/queryables) нам не нужны — берём pub/sub+query.
 
