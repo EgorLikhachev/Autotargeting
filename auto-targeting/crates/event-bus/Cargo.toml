@@ -1,0 +1,23 @@
+[package]
+name = "event-bus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Typed event/data bus between components on Zenoh (D-014 prototype)"
+
+[dependencies]
+common = { workspace = true }
+zenoh = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+futures = "0.3"
+
+[dev-dependencies]
+clap = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

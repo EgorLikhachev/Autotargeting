@@ -13,6 +13,7 @@ members = [
     "crates/cli",
     "crates/shmem-buffer",
     "crates/video-recorder",
+    "crates/event-bus",
 ]
 
 [workspace.package]
@@ -58,6 +59,9 @@ jpeg-decoder = "0.3"
 # FFI (shm ioctls, memfd)
 libc = "0.2"
 
+# Event bus (D-014)
+zenoh = "1"
+
 # HTTP server (for health endpoint)
 axum = "0.7"
 tower = "0.5"
@@ -86,6 +90,7 @@ fc-adapter = { path = "crates/fc-adapter", version = "0.1.0" }
 commander = { path = "crates/commander", version = "0.1.0" }
 shmem-buffer = { path = "crates/shmem-buffer", version = "0.1.0" }
 video-recorder = { path = "crates/video-recorder", version = "0.1.0" }
+event-bus = { path = "crates/event-bus", version = "0.1.0" }
 
 # Test deps (applied via [dev-dependencies] in each crate)
 proptest = "1.4"
