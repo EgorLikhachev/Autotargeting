@@ -192,10 +192,11 @@ impl Metrics {
 }
 
 /// Собрать бэкенд по конфигурации и геометрии кольца.
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn build_backend(
     cfg: &DetectorConfig,
-    _w: u32,
-    _h: u32,
+    w: u32,
+    h: u32,
 ) -> Result<Box<dyn InferenceBackend>, DetectorError> {
     match cfg.backend {
         BackendKind::Bridge => {
