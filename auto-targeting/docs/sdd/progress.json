@@ -229,6 +229,20 @@
         "deps_size": "26 zenoh crates, 427 transitive, 10.7MB binary, 0 system deps"
       },
       "report": "docs/DEV_NOTES/event_bus_zenoh.md; ADR D-014"
+    },
+    {
+      "step": "H8",
+      "name": "TG26-35: detector component — ring to bus, NPU contour",
+      "status": "completed",
+      "completed_at": "2026-08-18",
+      "device": "Orange Pi 5 + Vitade MJPG + rknn-bridge NPU",
+      "results": {
+        "contract": "DetectionsFrame + frame_w/frame_h (serde default); ADR D-015",
+        "crate": "detector (14th): next_after + jumps, guard discipline, backend bridge/cpu-onnx/mock, status topic",
+        "metrics": "FPS 9.9, infer p50 95.8ms, e2e p50 ~240ms, 293/293 published, 0 infer errors, 58 jumps (camera 30fps >> detector 10fps)",
+        "tests": "integration test (in-process ring + mock + zenoh bus) green on x86 and ARM (2.42s)"
+      },
+      "report": "docs/HARDWARE_TEST_RESULTS.md §14; ADR D-015"
     }
   ]
 }

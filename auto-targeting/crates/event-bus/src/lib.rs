@@ -87,12 +87,24 @@ impl Default for BusConfig {
 }
 
 /// Пакет детекций кадра (типичный payload R2: 1–10 КБ).
+///
+/// **Контракт события обнаружения (TG26-35, ADR D-015):**
+/// - `frame_seq` — идентификатор кадра кольца (TG26-160);
+/// - `captured_at` — метка времени ЗАХВАТА кадра (из ts_ns слота);
+/// - `detections[].bbox` — координаты в ПИКСЕЛЯХ исходного кадра
+///   (размеры `frame_w` × `frame_h`), origin левый-верхний;
+/// - `frame_w`/`frame_h` — размеры исходного кадра (для трекера);
+///   `#[serde(default)]` — обратная совместимость со старыми payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectionsFrame {
     pub frame_seq: u64,
     #[serde(with = "chrono_ts_ms")]
     pub captured_at: chrono::DateTime<chrono::Utc>,
     pub detections: Vec<Detection>,
+    #[serde(default)]
+    pub frame_w: u32,
+    #[serde(default)]
+    pub frame_h: u32,
 }
 
 /// Телеметрия АП (типичный payload R2: десятки байт).
@@ -325,6 +337,8 @@ mod tests {
         let det = DetectionsFrame {
             frame_seq: 7,
             captured_at: chrono::Utc::now(),
+            frame_w: 640,
+            frame_h: 480,
             detections: vec![Detection {
                 bbox: common::BoundingBox {
                     x: 10,
@@ -348,5 +362,28 @@ mod tests {
 
         bus.close().await.unwrap();
         client.close().await.unwrap();
+    }
+
+    /// Обратная совместимость контракта: payload БЕЗ frame_w/frame_h
+    /// (старые издатели) десериализуется с нулями.
+    #[test]
+    fn detections_frame_legacy_payload_parses() {
+        let legacy = r#"{"frame_seq":42,"captured_at":1755513600123,"detections":[]}"#;
+        let f: DetectionsFrame = serde_json::from_str(legacy).unwrap();
+        assert_eq!(f.frame_seq, 42);
+        assert_eq!(f.frame_w, 0);
+        assert_eq!(f.detections.len(), 0);
+        // Полный roundtrip.
+        let full = DetectionsFrame {
+            frame_seq: 1,
+            captured_at: chrono::Utc::now(),
+            frame_w: 640,
+            frame_h: 480,
+            detections: vec![],
+        };
+        let js = serde_json::to_string(&full).unwrap();
+        let back: DetectionsFrame = serde_json::from_str(&js).unwrap();
+        assert_eq!(back.frame_w, 640);
+        assert_eq!(back.frame_h, 480);
     }
 }

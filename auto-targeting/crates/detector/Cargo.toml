@@ -1,0 +1,33 @@
+[package]
+name = "detector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "TG26-35: independent detector component — SHM ring in, detections on the event bus"
+
+[dependencies]
+common = { workspace = true }
+shmem-buffer = { workspace = true }
+event-bus = { workspace = true }
+cv-inference = { workspace = true }
+video-capture = { workspace = true }
+yolov8 = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+clap = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[features]
+default = []
+# ONNX-бэкенд для x86-разработки (без NPU).
+cpu-onnx = ["cv-inference/cpu-onnx"]
+
+[dev-dependencies]
+shmem-buffer = { workspace = true }
+event-bus = { workspace = true }

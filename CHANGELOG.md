@@ -12,6 +12,13 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`detector` crate (TG26-35, ADR D-015)**: independent detection component —
+  SHM ring in (guard discipline), existing inference backends (NPU bridge
+  with the C++ unprojection contract, cpu-onnx, mock), detections on the
+  event bus (`at/detections`, contract extended with frame_w/frame_h,
+  backward compatible) + status topic (fps/infer p50-p95/e2e). Hardware
+  contour on RK3588: 9.9 FPS, infer p50 95.8 ms, e2e ~240 ms, 293/293
+  published, 0 errors; bus delivery test green on x86 and ARM.
 - **`event-bus` crate (D-014)**: typed event/data bus on Zenoh 1.10 —
   brokerless peer-to-peer (fixed topology, scouting off), typed
   pub/sub over serde_json, project topics (at/detections, at/telemetry,
