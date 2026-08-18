@@ -4824,6 +4824,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracker-crate"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "clap",
+ "common",
+ "event-bus",
+ "serde",
+ "serde_json",
+ "target-tracker",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

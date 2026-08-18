@@ -1,0 +1,27 @@
+[package]
+name = "tracker-crate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "M2: tracker component — at/detections in, at/tracks out (Kalman+Hungarian via target-tracker)"
+
+[dependencies]
+common = { workspace = true }
+event-bus = { workspace = true }
+target-tracker = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+clap = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[[bin]]
+name = "tracker"
+path = "src/main.rs"

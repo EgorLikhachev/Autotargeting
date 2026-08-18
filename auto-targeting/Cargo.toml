@@ -15,6 +15,7 @@ members = [
     "crates/video-recorder",
     "crates/event-bus",
     "crates/detector",
+    "crates/tracker",
 ]
 
 [workspace.package]
@@ -93,6 +94,7 @@ shmem-buffer = { path = "crates/shmem-buffer", version = "0.1.0" }
 video-recorder = { path = "crates/video-recorder", version = "0.1.0" }
 event-bus = { path = "crates/event-bus", version = "0.1.0" }
 detector = { path = "crates/detector", version = "0.1.0" }
+tracker-crate = { path = "crates/tracker", version = "0.1.0" }
 
 # Test deps (applied via [dev-dependencies] in each crate)
 proptest = "1.4"
