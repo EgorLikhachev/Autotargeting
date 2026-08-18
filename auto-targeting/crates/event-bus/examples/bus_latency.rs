@@ -61,13 +61,8 @@ mod zenoh_mode {
         let echo_pub = bus.publisher::<Ping>("at/latency/echo").await?;
         let sub = bus.subscriber::<Ping>("at/latency").await?;
         tokio::spawn(async move {
-            loop {
-                match sub.recv().await {
-                    Ok(p) => {
-                        let _ = echo_pub.publish(&p).await;
-                    }
-                    Err(_) => break,
-                }
+            while let Ok(p) = sub.recv().await {
+                let _ = echo_pub.publish(&p).await;
             }
         });
         futures::future::pending::<()>().await;
