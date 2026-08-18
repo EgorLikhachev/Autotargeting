@@ -486,7 +486,7 @@ mod tests {
         const CANDIDATES: &[&str] = &[
             "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "C:\Windows\Fonts\consola.ttf",
+            r"C:\Windows\Fonts\consola.ttf",
         ];
         let Some(path) = CANDIDATES.iter().find(|p| std::path::Path::new(p).exists()) else {
             eprintln!("[skip] no system font for draw_osd test");
