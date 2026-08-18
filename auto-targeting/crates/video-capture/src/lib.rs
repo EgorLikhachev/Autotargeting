@@ -29,7 +29,7 @@ pub mod v4l2_real;
 pub mod v4l2_direct;
 
 pub use convert::{
-    convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, rgb24_to_nv12, yuyv_to_nv12,
+    convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, rgb24_to_nv12, nv12_to_rgb24, yuyv_to_nv12,
     yuyv_to_rgb24, ConversionError, ConversionResult,
 };
 pub use replay::ReplaySource;

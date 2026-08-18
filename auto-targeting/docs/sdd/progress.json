@@ -199,6 +199,20 @@
         ]
       },
       "report": "docs/HARDWARE_TEST_RESULTS.md §11; docs/DEV_NOTES/shmem_ring_buffer.md"
+    },
+    {
+      "step": "H6",
+      "name": "TG26-125: video-recorder — first real SHM consumer",
+      "status": "completed",
+      "completed_at": "2026-08-18",
+      "device": "Orange Pi 5 + ffmpeg/libx264",
+      "results": {
+        "tests": "2 unit + doctest cross-platform; ffmpeg smoke (ffprobe h264) + multiprocess integration green on RK3588 (--include-ignored)",
+        "live_run": "producer 640x480 NV12@30fps (446 published, 0 dropped) + recorder OSD 12s (RECORDED=353, OSD=353, JUMPS=1) + PARALLEL consumer (VERIFIED=237, TORN=0) — non-blocking proven",
+        "mp4": "h264 640x480, 353 frames, 11.77s, 98.6 KB (ffprobe-verified, artifact downloaded)",
+        "design": "guard discipline: frame copied and FrameGuard dropped BEFORE conversion/OSD/pipe-write — blocked ffmpeg pipe can never freeze a ring slot"
+      },
+      "report": "docs/HARDWARE_TEST_RESULTS.md §12; docs/DEV_NOTES/video_recorder.md"
     }
   ]
 }

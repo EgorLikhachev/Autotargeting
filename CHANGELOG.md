@@ -12,6 +12,15 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`video-recorder` crate (TG26-125)**: first real consumer of the SHM
+  frame ring — ffmpeg subprocess (rawvideo pipe -> libx264/yuv420p MP4),
+  burned-in OSD (ISO timestamp, frame id, geometry via new
+  `cv_visualizer::draw_osd`), sequential/latest read modes with
+  catch-up jumps. Guard discipline: the FrameGuard is dropped before any
+  heavy work, so a blocked encoder pipe can never freeze a ring slot.
+  Hardware-validated on RK3588: parallel consumer VERIFIED=237/TORN=0
+  during recording; MP4 h264 640x480 353 frames 11.77s (ffprobe).
+  New pub `video_capture::nv12_to_rgb24` (integer BT.601).
 - **Performance audit & optimization pass** (docs/PERF_AUDIT_2026-08.md,
   A/B on RK3588): rgb24_to_nv12 ×9.1, yuyv_to_rgb24 ×7.9, yuyv_to_nv12
   ×2.4, letterbox ×11.3, rgb_to_nchw ×1.6, postprocess ×1.26 — total CPU

@@ -1,0 +1,25 @@
+[package]
+name = "video-recorder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "TG26-125: independent video-recorder consumer of the SHM frame ring (ffmpeg rawvideo pipe, OSD)"
+
+[dependencies]
+common = { workspace = true }
+shmem-buffer = { workspace = true }
+video-capture = { workspace = true }
+cv-visualizer = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { workspace = true }
+image = { version = "0.25", default-features = false }
+ab_glyph = "0.2"
+
+[dev-dependencies]
+criterion = { workspace = true }
+tempfile = "3.10"
