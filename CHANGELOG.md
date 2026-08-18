@@ -12,6 +12,13 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`fc-bridge` crate (M3)**: FC ↔ bus bridge over the
+  FlightControllerAdapter trait — telemetry to at/telemetry at configured
+  Hz (GPS/mode included), FC edge events (link/armed/mode) to
+  at/fc_events with dedup, commands from at/commands (set_roi,
+  set_pos_ned, set_mode, arm/disarm) dispatched to any adapter (mock |
+  sitl | ardupilot), status at/status/fc. Hardware-run on RK3588 (mock):
+  9.9 Hz telemetry + events observed via bus_dump; tests 3/3 on x86+ARM.
 - **`tracker-crate` (M2, bus migration)**: tracker component — first bus
   CONSUMER: subscribes at/detections, runs the existing Kalman+Hungarian
   MultiTargetTracker, publishes TrackMsg per active track to at/tracks +
