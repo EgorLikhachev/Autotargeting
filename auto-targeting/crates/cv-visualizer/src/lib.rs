@@ -207,6 +207,28 @@ pub fn annotate(
     Ok(img)
 }
 
+/// Нарисовать OSD (on-screen display): стек строк служебной информации
+/// в левом верхнем углу — временная метка, id кадра, размеры и т.п.
+/// (TG26-125: путь видеорекордера.) Тот же паттерн, что подписи детекций:
+/// PxScale 14, чёрная подложка LABEL_BG, TEXT_COLOR.
+pub fn draw_osd(img: &mut RgbImage, lines: &[&str], font: &FontVec) {
+    let scale = PxScale::from(LABEL_SCALE);
+    let scaled = font.as_scaled(scale);
+    let line_h = scaled.height().ceil() as i32 + 4;
+    let mut y = 2i32;
+    for line in lines {
+        let mut line_w = 0.0f32;
+        for c in line.chars() {
+            line_w += scaled.h_advance(scaled.glyph_id(c));
+        }
+        let line_w = line_w.ceil() as u32 + 6;
+        let bg = Rect::at(0, y).of_size(line_w, line_h as u32);
+        draw_filled_rect_mut(img, bg, LABEL_BG);
+        draw_text_mut(img, TEXT_COLOR, 3, y + 2, scale, font, line);
+        y += line_h;
+    }
+}
+
 /// Encode an `RgbImage` to JPEG bytes (quality ~92 — good for debug overlays).
 ///
 /// Принимает кадр **по значению** (перф-аудит 2026-08: прежний `&RgbImage`
@@ -453,6 +475,34 @@ mod tests {
             frame_to_rgb_image(&f),
             Err(VisualizerError::FrameSize { .. })
         ));
+    }
+
+    /// TG26-125: OSD рисует стек строк — подложка меняет пиксели, без
+    /// паники. Реальный шрифт берём из системных путей (DejaVu на
+    /// Linux/стенде, Consolas на Windows); при отсутствии — тихий skip
+    /// (полное покрытие — интеграцией рекордера на стенде).
+    #[test]
+    fn draw_osd_draws_stack_of_lines() {
+        const CANDIDATES: &[&str] = &[
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "C:\Windows\Fonts\consola.ttf",
+        ];
+        let Some(path) = CANDIDATES.iter().find(|p| std::path::Path::new(p).exists()) else {
+            eprintln!("[skip] no system font for draw_osd test");
+            return;
+        };
+        let font = FontVec::try_from_vec(std::fs::read(path).unwrap()).unwrap();
+        let mut img = RgbImage::from_pixel(160, 90, Rgb([10, 20, 30]));
+        draw_osd(
+            &mut img,
+            &["2026-08-18T12:00:00.123Z", "frame 42", "640x480 NV12"],
+            &font,
+        );
+        // Подложка первой строки перекрыла исходный фон в левом верхнем углу.
+        assert_ne!(img.get_pixel(3, 3), &Rgb([10, 20, 30]));
+        // Ниже трёх строк (~3*(14+4)) — фон нетронут.
+        assert_eq!(img.get_pixel(3, 60), &Rgb([10, 20, 30]));
     }
 
     #[test]
