@@ -58,12 +58,20 @@ pub mod topics {
     pub const TELEMETRY: &str = "at/telemetry";
     pub const COMMANDS: &str = "at/commands";
     pub const CONFIG: &str = "at/config";
+    pub const TRACKS: &str = "at/tracks";
+    pub const CLASSIFICATIONS: &str = "at/classifications";
+    pub const FC_EVENTS: &str = "at/fc_events";
+    pub const CONFIG_ACK: &str = "at/config_ack";
     /// Статус компонента: `at/status/{component}`.
     #[must_use]
     pub fn status(component: &str) -> String {
         format!("at/status/{component}")
     }
 }
+
+/// Версия контрактов шины (инкремент при ломающих изменениях; новые
+/// поля добавляются с `#[serde(default)]` — версия не растёт).
+pub const CONTRACT_VERSION: u8 = 1;
 
 /// Конфигурация шины.
 #[derive(Debug, Clone)]
@@ -108,6 +116,7 @@ pub struct DetectionsFrame {
 }
 
 /// Телеметрия АП (типичный payload R2: десятки байт).
+/// Расширяемые поля — `#[serde(default)]` (обратная совместимость, M0).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct TelemetrySample {
     pub t_ms: i64,
@@ -115,6 +124,85 @@ pub struct TelemetrySample {
     pub pitch_deg: f32,
     pub yaw_deg: f32,
     pub alt_m: f32,
+    /// Широта, градусы (WGS-84); 0 — нет GPS.
+    #[serde(default)]
+    pub lat_deg: f64,
+    /// Долгота, градусы; 0 — нет GPS.
+    #[serde(default)]
+    pub lon_deg: f64,
+    /// Напряжение АКБ, В; 0 — нет данных.
+    #[serde(default)]
+    pub battery_v: f32,
+    /// Режим FC (ArduPilot mode id); 255 — неизвестен.
+    #[serde(default = "default_mode_unknown")]
+    pub mode: u8,
+}
+
+fn default_mode_unknown() -> u8 {
+    255
+}
+
+impl TelemetrySample {
+    #[must_use]
+    pub fn minimal(t_ms: i64, roll: f32, pitch: f32, yaw: f32, alt: f32) -> Self {
+        Self {
+            t_ms,
+            roll_deg: roll,
+            pitch_deg: pitch,
+            yaw_deg: yaw,
+            alt_m: alt,
+            lat_deg: 0.0,
+            lon_deg: 0.0,
+            battery_v: 0.0,
+            mode: default_mode_unknown(),
+        }
+    }
+}
+
+/// Команда на шину (`at/commands`, M0). Reliable-QoS у издателя.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommandMsg {
+    pub v: u8,
+    /// Целевой компонент ("fc" | "recorder" | "detector" | ...).
+    pub target: String,
+    /// Имя команды (например "set_roi", "start_rec", "arm").
+    pub cmd: String,
+    /// Аргументы — плоский JSON-объект.
+    pub args: serde_json::Value,
+    /// Отправитель (для аудита).
+    pub source: String,
+    /// Уникальный id команды (для ack/dedup).
+    pub id: u64,
+}
+
+/// Сопровождаемая цель от трекера (`at/tracks`, M0 → реализация в M2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackMsg {
+    pub v: u8,
+    pub track_id: u64,
+    pub frame_seq: u64,
+    pub bbox: common::BoundingBox,
+    /// Скорость центра, пикс/с (оценка Kalman).
+    pub vx: f32,
+    pub vy: f32,
+    pub class: String,
+    pub class_id: u32,
+    pub confidence: f32,
+    /// Возраст трека в кадрах.
+    pub age: u32,
+    /// Число кадров с последнего подтверждения.
+    pub misses: u32,
+}
+
+/// Событие FC (`at/fc_events`, M0 → реализация в M3): смена режима, arm,
+/// heartbeat-статус, ошибки.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FcEvent {
+    pub v: u8,
+    pub kind: String,
+    pub detail: serde_json::Value,
+    #[serde(with = "chrono_ts_ms")]
+    pub at: chrono::DateTime<chrono::Utc>,
 }
 
 mod chrono_ts_ms {
@@ -245,6 +333,31 @@ impl EventBus {
         self.subscriber(topics::TELEMETRY).await
     }
 
+    /// Издатель команд (`at/commands`) с усиленной доставкой (M0):
+    /// CongestionControl::Block — блокировать вместо дропа при перегрузке
+    /// (zenoh 1.10: reliability-опция издателя пока unstable-фича).
+    pub async fn publish_commands(&self) -> Result<TypedPublisher<CommandMsg>, BusError> {
+        let p = self
+            .session
+            .declare_publisher(self.key(topics::COMMANDS))
+            .congestion_control(zenoh::qos::CongestionControl::Block)
+            .await
+            .map_err(zerr)?;
+        Ok(TypedPublisher {
+            inner: p,
+            _marker: std::marker::PhantomData,
+        })
+    }
+    pub async fn subscribe_commands(&self) -> Result<TypedSubscriber<CommandMsg>, BusError> {
+        self.subscriber(topics::COMMANDS).await
+    }
+    pub async fn publish_tracks(&self) -> Result<TypedPublisher<TrackMsg>, BusError> {
+        self.publisher(topics::TRACKS).await
+    }
+    pub async fn subscribe_tracks(&self) -> Result<TypedSubscriber<TrackMsg>, BusError> {
+        self.subscriber(topics::TRACKS).await
+    }
+
     /// Graceful-закрытие сессии.
     pub async fn close(self) -> Result<(), BusError> {
         self.session.close().await.map_err(zerr)
@@ -319,13 +432,7 @@ mod tests {
         // сообщений — ожидаемая семантика zenoh до готовности подписки).
         tokio::time::sleep(Duration::from_millis(300)).await;
 
-        let sample = TelemetrySample {
-            t_ms: 1234,
-            roll_deg: 1.5,
-            pitch_deg: -0.25,
-            yaw_deg: 90.0,
-            alt_m: 120.5,
-        };
+        let sample = TelemetrySample::minimal(1234, 1.5, -0.25, 90.0, 120.5);
         pub_.publish(&sample).await.unwrap();
         let got = sub.recv_timeout(Duration::from_secs(5)).await.unwrap();
         assert_eq!(got, sample);
@@ -362,6 +469,79 @@ mod tests {
 
         bus.close().await.unwrap();
         client.close().await.unwrap();
+    }
+
+    /// M0: roundtrip всех контрактов шины (телеметрия с расширениями,
+    /// команда, трек, FC-событие) + legacy-совместимость телеметрии.
+    #[test]
+    fn m0_contracts_roundtrip() {
+        // TelemetrySample: полный.
+        let t = TelemetrySample {
+            t_ms: 1,
+            roll_deg: 1.0,
+            pitch_deg: 2.0,
+            yaw_deg: 3.0,
+            alt_m: 100.0,
+            lat_deg: 55.75,
+            lon_deg: 37.62,
+            battery_v: 12.4,
+            mode: 7,
+        };
+        let js = serde_json::to_string(&t).unwrap();
+        let back: TelemetrySample = serde_json::from_str(&js).unwrap();
+        assert_eq!(back, t);
+        // Legacy (без новых полей) — дефолты.
+        let legacy = r#"{"t_ms":9,"roll_deg":0.0,"pitch_deg":0.0,"yaw_deg":0.0,"alt_m":0.0}"#;
+        let lt: TelemetrySample = serde_json::from_str(legacy).unwrap();
+        assert_eq!(lt.mode, 255);
+        assert_eq!(lt.battery_v, 0.0);
+        assert_eq!(lt.lat_deg, 0.0);
+
+        // CommandMsg.
+        let c = CommandMsg {
+            v: CONTRACT_VERSION,
+            target: "recorder".into(),
+            cmd: "start_rec".into(),
+            args: serde_json::json!({"seconds": 30}),
+            source: "cli".into(),
+            id: 42,
+        };
+        let js = serde_json::to_string(&c).unwrap();
+        let back: CommandMsg = serde_json::from_str(&js).unwrap();
+        assert_eq!(back.cmd, "start_rec");
+        assert_eq!(back.id, 42);
+        assert_eq!(back.args["seconds"], 30);
+
+        // TrackMsg.
+        let tr = TrackMsg {
+            v: CONTRACT_VERSION,
+            track_id: 1,
+            frame_seq: 77,
+            bbox: common::BoundingBox { x: 1, y: 2, width: 3, height: 4 },
+            vx: 1.5,
+            vy: -0.5,
+            class: "person".into(),
+            class_id: 0,
+            confidence: 0.9,
+            age: 12,
+            misses: 0,
+        };
+        let js = serde_json::to_string(&tr).unwrap();
+        let back: TrackMsg = serde_json::from_str(&js).unwrap();
+        assert_eq!(back.track_id, 1);
+        assert_eq!(back.bbox.width, 3);
+
+        // FcEvent.
+        let fe = FcEvent {
+            v: CONTRACT_VERSION,
+            kind: "mode_change".into(),
+            detail: serde_json::json!({"from": 0, "to": 4}),
+            at: chrono::Utc::now(),
+        };
+        let js = serde_json::to_string(&fe).unwrap();
+        let back: FcEvent = serde_json::from_str(&js).unwrap();
+        assert_eq!(back.kind, "mode_change");
+        assert_eq!(back.detail["to"], 4);
     }
 
     /// Обратная совместимость контракта: payload БЕЗ frame_w/frame_h
