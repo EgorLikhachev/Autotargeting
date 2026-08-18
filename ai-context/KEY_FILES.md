@@ -27,6 +27,7 @@ auto-targeting/                  # корень репо (GitHub front-door)
     │   ├── fc-adapter/          # MAVLink (Mock/SITL/ArduPilot)
     │   ├── shmem-buffer/        # TG26-160: SPMC кольцо в SHM (POSIX shm/mmap)
     │   ├── video-recorder/      # TG26-125: рекордер-потребитель (ffmpeg+OSD)
+    │   ├── event-bus/           # D-014: шина событий на Zenoh (peer-to-peer)
     │   ├── commander/           # StateMachine + anti-loop + PID + safety
     │   └── cli/                 # бинарь auto-targeting (REPL/scenario/health)
     ├── rknn-bridge/             # C++ микросервис NPU (CMake)

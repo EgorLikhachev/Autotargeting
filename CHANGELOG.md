@@ -12,6 +12,14 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`event-bus` crate (D-014)**: typed event/data bus on Zenoh 1.10 —
+  brokerless peer-to-peer (fixed topology, scouting off), typed
+  pub/sub over serde_json, project topics (at/detections, at/telemetry,
+  at/commands, at/config, at/status). Research compared 8 real
+  implementations (docs/BUS_SELECTION.md); prototype validated on x86 and
+  RK3588: one-way latency p50 588-814 us on ARM (vs 1 ms target),
+  UDS-baseline comparison, 26 zenoh crates / 10.7 MB binary / 0 system
+  deps. ADR D-014; component migration deliberately out of scope.
 - **`video-recorder` crate (TG26-125)**: first real consumer of the SHM
   frame ring — ffmpeg subprocess (rawvideo pipe -> libx264/yuv420p MP4),
   burned-in OSD (ISO timestamp, frame id, geometry via new

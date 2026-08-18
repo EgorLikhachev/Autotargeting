@@ -47,6 +47,7 @@
 | **Репозиторий оформлен (README/LICENSE/CONTRIBUTING/CHANGELOG/CoC/SECURITY/SUPPORT/issue-templates)** | ✅ | — |
 | **SHM ring buffer (TG26-160, крейт `shmem-buffer`)** | ✅ 24/24 теста, 7/7 критериев, ADR D-013 | Phase 6 фундамент |
 | **Видеорекордер (TG26-125, крейт `video-recorder`)** | ✅ HW-validated: MP4+OSD, параллельный потребитель не заблокирован (TORN=0) | первый SHM-потребитель |
+| **Шина событий (D-014, крейт `event-bus` на Zenoh)** | ✅ прототип x86+RK3588: p50 ≤0.82 мс на ARM, 0 системных зависимостей | миграция компонентов — отдельные задачи |
 | Тесты: **294 unit (lib, aarch64)** + 6 C++ NMS + criterion + SITL-сценарии | ✅ | — |
 | **`run_full()`** (связать видео+инференс+FC в runtime) | 🟡 stub | Phase 5/6 |
 | **Свой датасет + fine-tune** | 🔴 | Phase 1.2 |
