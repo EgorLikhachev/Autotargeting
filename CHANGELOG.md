@@ -12,6 +12,19 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **`tracker-crate` (M2, bus migration)**: tracker component — first bus
+  CONSUMER: subscribes at/detections, runs the existing Kalman+Hungarian
+  MultiTargetTracker, publishes TrackMsg per active track to at/tracks +
+  at/status/tracker. Live contour on RK3588 (camera→detector(NPU)→tracker,
+  observed via bus_dump); integration tests 2/2 on x86 and ARM (moving
+  target → one stable track; two targets → two tracks).
+- **Bus migration M0+M1** (BUS_MIGRATION_PLAN.md): M0 contracts —
+  CommandMsg/TrackMsg/FcEvent, TelemetrySample GPS/battery/mode extensions
+  (serde-default legacy-compatible), CONTRACT_VERSION, commands publisher
+  with CongestionControl::Block; M1 — bus_dump observer (at/**) and
+  component statuses on the stand: camera_publisher --bus →
+  at/status/camera (fps_actual ~32), video-recorder --bus →
+  at/status/recorder (315 frames/run), both visible to bus_dump on RK3588.
 - **`detector` crate (TG26-35, ADR D-015)**: independent detection component —
   SHM ring in (guard discipline), existing inference backends (NPU bridge
   with the C++ unprojection contract, cpu-onnx, mock), detections on the
