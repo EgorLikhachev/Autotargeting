@@ -87,6 +87,8 @@ pub struct RecorderConfig {
     pub max_duration: Option<Duration>,
     /// Завершиться, если новых кадров нет дольше этого времени.
     pub quiet_timeout: Option<Duration>,
+    /// Endpoint шины zenoh для at/status/recorder (None — статусы выкл, M1).
+    pub bus: Option<String>,
 }
 
 impl Default for RecorderConfig {
@@ -100,6 +102,7 @@ impl Default for RecorderConfig {
             font: None,
             max_duration: None,
             quiet_timeout: Some(Duration::from_secs(5)),
+            bus: None,
         }
     }
 }
@@ -223,6 +226,16 @@ impl FfmpegRawWriter {
 
 // ===================== recorder =====================
 
+/// M1: статус рекордера на шине (at/status/recorder).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RecorderStatus {
+    pub v: u8,
+    pub frames_written: u64,
+    pub jumps: u64,
+    pub recording: bool,
+    pub output: String,
+}
+
 /// Записывающий цикл: SHM → копия → конвертация → OSD → ffmpeg.
 pub struct Recorder {
     cfg: RecorderConfig,
@@ -251,7 +264,7 @@ impl Recorder {
     }
 
     /// Основной цикл. Возвращает статистику; файл финализирован.
-    pub fn run(&self, consumer: &FrameConsumer) -> Result<RecorderStats, RecorderError> {
+    pub async fn run(&self, consumer: &FrameConsumer) -> Result<RecorderStats, RecorderError> {
         let cap = consumer.capacity();
         // Первый кадр даёт геометрию (ring хранит её в каждом слоте) и
         // сразу идёт в запись через общий путь.
@@ -266,6 +279,26 @@ impl Recorder {
         tracing::info!(w, h, ?format, cap, "recorder attached to segment");
 
         let mut writer = FfmpegRawWriter::spawn(&self.cfg.output, w, h, self.cfg.fps)?;
+
+        // M1: опциональный статус на шину.
+        let bus_handle = match &self.cfg.bus {
+            Some(ep) => match event_bus::EventBus::connect(ep).await {
+                Ok(bus) => {
+                    let p = bus
+                        .publisher::<RecorderStatus>(&event_bus::topics::status("recorder"))
+                        .await
+                        .ok();
+                    Some((bus, p))
+                }
+                Err(e) => {
+                    tracing::warn!("bus connect failed: {e}");
+                    None
+                }
+            },
+            None => None,
+        };
+        let mut last_status = Instant::now();
+
         let mut stats = RecorderStats::default();
         let mut last: u64 = 0;
         let started = Instant::now();
@@ -336,9 +369,35 @@ impl Recorder {
                 }
             }
             self.write_rgb(&mut writer, rgb, &mut stats)?;
+
+            // M1: статус раз в секунду.
+            if last_status.elapsed() >= Duration::from_secs(1) {
+                if let Some((_, Some(p))) = &bus_handle {
+                    let st = RecorderStatus {
+                        v: event_bus::CONTRACT_VERSION,
+                        frames_written: stats.frames_written,
+                        jumps: stats.jumps,
+                        recording: true,
+                        output: self.cfg.output.clone(),
+                    };
+                    let _ = p.publish(&st).await;
+                }
+                last_status = Instant::now();
+            }
         }
 
         writer.finish()?;
+        if let Some((bus, Some(p))) = bus_handle {
+            let st = RecorderStatus {
+                v: event_bus::CONTRACT_VERSION,
+                frames_written: stats.frames_written,
+                jumps: stats.jumps,
+                recording: false,
+                output: self.cfg.output.clone(),
+            };
+            let _ = p.publish(&st).await;
+            let _ = bus.close().await;
+        }
         Ok(stats)
     }
 

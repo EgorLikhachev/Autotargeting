@@ -39,7 +39,8 @@ struct Args {
     bus: Option<String>,
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -93,7 +94,7 @@ fn main() {
         }
     };
 
-    match recorder.run(&consumer) {
+    match recorder.run(&consumer).await {
         Ok(stats) => {
             println!(
                 "[summary] RECORDED={} OSD={} JUMPS={} received={}",
