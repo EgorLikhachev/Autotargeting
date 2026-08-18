@@ -34,6 +34,9 @@ struct Args {
     /// Завершение при тишине стрима, сек.
     #[arg(long, default_value_t = 5)]
     quiet_timeout: u64,
+    /// Endpoint шины zenoh для at/status/recorder (пусто — статусы выкл, M1).
+    #[arg(long)]
+    bus: Option<String>,
 }
 
 fn main() {
@@ -63,6 +66,7 @@ fn main() {
         font: args.font.clone(),
         max_duration: (args.seconds > 0).then(|| std::time::Duration::from_secs(args.seconds)),
         quiet_timeout: Some(std::time::Duration::from_secs(args.quiet_timeout)),
+        bus: args.bus.clone(),
     };
 
     println!(

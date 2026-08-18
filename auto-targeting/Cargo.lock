@@ -5146,6 +5146,7 @@ dependencies = [
  "cv-visualizer",
  "event-bus",
  "image",
+ "serde",
  "shmem-buffer",
  "tempfile",
  "thiserror 1.0.69",
