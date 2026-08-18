@@ -34,9 +34,13 @@ struct Args {
     /// Завершение при тишине стрима, сек.
     #[arg(long, default_value_t = 5)]
     quiet_timeout: u64,
+    /// Endpoint шины zenoh для at/status/recorder (пусто — статусы выкл, M1).
+    #[arg(long)]
+    bus: Option<String>,
 }
 
-fn main() {
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -63,6 +67,7 @@ fn main() {
         font: args.font.clone(),
         max_duration: (args.seconds > 0).then(|| std::time::Duration::from_secs(args.seconds)),
         quiet_timeout: Some(std::time::Duration::from_secs(args.quiet_timeout)),
+        bus: args.bus.clone(),
     };
 
     println!(
@@ -89,7 +94,7 @@ fn main() {
         }
     };
 
-    match recorder.run(&consumer) {
+    match recorder.run(&consumer).await {
         Ok(stats) => {
             println!(
                 "[summary] RECORDED={} OSD={} JUMPS={} received={}",

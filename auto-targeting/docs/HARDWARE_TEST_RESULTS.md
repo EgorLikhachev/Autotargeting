@@ -548,3 +548,36 @@ One-way латентность (RTT/2, JSON, 2 процесса, tcp/127.0.0.1:1
 | bbox+класс+conf+id кадра | DetectionsFrame (контракт в event-bus); интеграционный тест ассертит поля |
 | Публикация через шину | PUBLISHED=293 на at/detections; bus-доставка верифицирована тестом на ARM (2.42 с, зелёный) |
 | FPS/latency контура | §14.1 + статус-топик at/status/detector |
+
+---
+
+## 15. Миграция M0+M1: контракты шины + статусы компонентов (2026-08-18)
+
+Ветка `feature/bus-migration-m0-m1`, план — [BUS_MIGRATION_PLAN.md](BUS_MIGRATION_PLAN.md).
+
+### 15.1 M0 — контракты и QoS
+- `CommandMsg`/`TrackMsg`/`FcEvent` + темы `at/tracks|classifications|fc_events|config_ack`;
+  `TelemetrySample` расширен (GPS/батарея/режим, serde-default — legacy
+  совместим); `CONTRACT_VERSION=1`; издатель `at/commands` с
+  CongestionControl::Block (reliability-опция zenoh 1.10 unstable-гейта).
+- Roundtrip+legacy тесты: 3/3 зелёные.
+
+### 15.2 M1 — статусы на шине + bus_dump (RK3588)
+
+Прогон: `bus_dump --listen` (at/**) + `camera_publisher --bus` (Vitade MJPG
+640×480@30) + `video-recorder --bus` (10 с, OSD). Реальные сообщения:
+
+```text
+at/status/camera {"v":1,"device":"/dev/video0","width":640,"height":480,
+  "fps_target":30,"format":"mjpeg","fps_actual":31.98,"published":69,
+  "dropped":0,"convert_errors":0}
+at/status/recorder {"v":1,"frames_written":315,"jumps":1,
+  "recording":false,"output":"/tmp/m1_rec.mp4"}
+```
+
+| Проверка | Результат |
+|---|---|
+| bus_dump видит оба статус-топика | ✅ |
+| camera: fps_actual ≈ 32 (target 30), 483 published, 0 дропов | ✅ |
+| recorder: 315 кадров записано, OSD 315, статус recording→false | ✅ |
+| MP4 артефакт | /tmp/m1_rec.mp4, 329 КБ |

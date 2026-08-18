@@ -243,6 +243,18 @@
         "tests": "integration test (in-process ring + mock + zenoh bus) green on x86 and ARM (2.42s)"
       },
       "report": "docs/HARDWARE_TEST_RESULTS.md §14; ADR D-015"
+    },
+    {
+      "step": "H9",
+      "name": "Bus migration M0+M1: contracts, QoS, component statuses, bus_dump",
+      "status": "completed",
+      "completed_at": "2026-08-18",
+      "device": "RK3588 + Vitade MJPG",
+      "results": {
+        "m0": "CommandMsg/TrackMsg/FcEvent + topics + TelemetrySample ext (GPS/battery/mode, serde-default) + CONTRACT_VERSION=1; commands publisher CongestionControl::Block (zenoh reliability unstable-gated); 3/3 roundtrip+legacy tests",
+        "m1": "bus_dump observer (at/**); camera_publisher --bus -> at/status/camera (fps_actual 31.98, 483 published, 0 drops); video-recorder --bus -> at/status/recorder (315 frames, recording flag); both statuses visible to bus_dump on the stand"
+      },
+      "report": "docs/HARDWARE_TEST_RESULTS.md §15"
     }
   ]
 }
