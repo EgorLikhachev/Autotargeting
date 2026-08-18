@@ -213,6 +213,22 @@
         "design": "guard discipline: frame copied and FrameGuard dropped BEFORE conversion/OSD/pipe-write — blocked ffmpeg pipe can never freeze a ring slot"
       },
       "report": "docs/HARDWARE_TEST_RESULTS.md §12; docs/DEV_NOTES/video_recorder.md"
+    },
+    {
+      "step": "H7",
+      "name": "Event bus on Zenoh — prototype on x86 + RK3588 (D-014)",
+      "status": "completed",
+      "completed_at": "2026-08-18",
+      "device": "x86 dev host + Orange Pi 5",
+      "results": {
+        "research": "8 real implementations compared (docs/BUS_SELECTION.md); shortlist Zenoh",
+        "prototype": "crate event-bus: brokerless peer-to-peer, typed pub/sub over serde_json, project topics; in-process roundtrip test + multiprocess latency benchmark (zenoh vs UDS baseline)",
+        "x86_latency_p50": "64B=40us, 1KiB=52us, 8KiB=124us (tcp/lo)",
+        "arm_latency_p50": "64B=588us, 1KiB=814us, 8KiB=627us; UDS baseline 28/376/406us",
+        "req_r3": "met: p99 max 1.09ms vs 1ms target / 5ms tolerance",
+        "deps_size": "26 zenoh crates, 427 transitive, 10.7MB binary, 0 system deps"
+      },
+      "report": "docs/DEV_NOTES/event_bus_zenoh.md; ADR D-014"
     }
   ]
 }
