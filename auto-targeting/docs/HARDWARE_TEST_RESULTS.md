@@ -621,3 +621,32 @@ at/status/tracker {"v":1,"frames_in":19,"tracks_published":22921,
   полезности треков; фиксирование порога/калибровка — вне M2
   (KNOWN_ISSUES №7/8).
 - Треки стабильны: один движущийся объект → один track_id (тест).
+
+---
+
+## 17. M3: fc-bridge — FC ↔ шина (2026-08-18)
+
+Крейт `fc-bridge` (бинарь `fc-bridge`, ветка `feature/bus-migration-m3-fc`).
+Мост над `FlightControllerAdapter` (mock | sitl-mavlink | ardupilot-mavlink).
+
+### 17.1 Живой прогон (RK3588, mock-адаптер, bus_dump)
+
+```text
+at/telemetry {"t_ms":...,"roll_deg":0.0,...,"mode":2}           ×58 за 6 с (9.9 Гц)
+at/fc_events {"v":1,"kind":"link_up",...}
+at/fc_events {"v":1,"kind":"armed","detail":{"armed":false},...}
+at/fc_events {"v":1,"kind":"mode_change","detail":{"mode":"Stabilize"},...}
+at/status/fc {"v":1,"adapter":"MockFcAdapter","heartbeat_alive":true,
+  "mode":"Stabilize","telemetry_hz_actual":9.885,...}
+```
+
+| Проверка | Результат |
+|---|---|
+| Телеметрия на шине с заданным Гц | ✅ 58 сообщений / 6 с ≈ 9.9 Гц (цель 10) |
+| События FC (рёбра link/armed/mode) | ✅ 3 события при старте, без дублей |
+| Статус at/status/fc | ✅ адаптер/alive/режим/armed/Гц |
+| Команды по шине → диспетчер | ✅ тест 3/3 (mock; телеметрия+статус+arm-команда) |
+| Тесты x86 + ARM | ✅ 3/3 на обеих (2.37 с на ARM) |
+
+SITL-прогон (x86, docker): не выполнялся в этой итерации — мост агностичен
+адаптеру (трейт), SITL-сценарий назначен на M4 (commander) по плану.

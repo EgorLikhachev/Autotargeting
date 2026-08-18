@@ -16,6 +16,7 @@ members = [
     "crates/event-bus",
     "crates/detector",
     "crates/tracker",
+    "crates/fc-bridge",
 ]
 
 [workspace.package]
