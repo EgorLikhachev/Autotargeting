@@ -14,6 +14,7 @@ video-capture = { workspace = true }
 cv-visualizer = { workspace = true }
 event-bus = { workspace = true }
 chrono = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
