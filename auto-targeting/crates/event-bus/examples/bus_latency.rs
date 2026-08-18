@@ -59,7 +59,7 @@ mod zenoh_mode {
         .await?;
         eprintln!("[zenoh] listening on {ENDPOINT}");
         let echo_pub = bus.publisher::<Ping>("at/latency/echo").await?;
-        let mut sub = bus.subscriber::<Ping>("at/latency").await?;
+        let sub = bus.subscriber::<Ping>("at/latency").await?;
         tokio::spawn(async move {
             loop {
                 match sub.recv().await {
@@ -81,7 +81,7 @@ mod zenoh_mode {
         sizes: &[usize],
     ) -> Result<Vec<(usize, Vec<f64>)>, event_bus::BusError> {
         let bus = EventBus::connect(ENDPOINT).await?;
-        let mut echo = bus.subscriber::<Ping>("at/latency/echo").await?;
+        let echo = bus.subscriber::<Ping>("at/latency/echo").await?;
         let pub_ = bus.publisher::<Ping>("at/latency").await?;
         // Declare-ы асинхронно распространяются между peer-ами.
         tokio::time::sleep(Duration::from_millis(400)).await;
