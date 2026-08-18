@@ -233,6 +233,67 @@ pub fn yuyv_to_rgb24(frame: &Frame) -> ConversionResult<Frame> {
     })
 }
 
+/// Конвертировать NV12 в RGB24 (TG26-125: путь видеорекордера).
+///
+/// Integer BT.601 (×256 fixed-point, расхождение с f32-эталоном ≤ 1),
+/// построчные chunks + парная обработка пикселей (хрома читается на пару).
+/// Чётные ширины (NV12-стандарт); нечётный хвост отбрасывается.
+pub fn nv12_to_rgb24(frame: &Frame) -> ConversionResult<Frame> {
+    if frame.metadata.format != PixelFormat::Nv12 {
+        return Err(ConversionError::InvalidFormat {
+            expected: PixelFormat::Nv12,
+            actual: frame.metadata.format,
+        });
+    }
+    let w = frame.metadata.width as usize;
+    let h = frame.metadata.height as usize;
+    let expected_len = w * h * 3 / 2;
+    if frame.data.len() != expected_len {
+        return Err(ConversionError::InvalidDimensions {
+            w: w as u32,
+            h: h as u32,
+            len: frame.data.len(),
+        });
+    }
+    let mut out = vec![0u8; w * h * 3];
+    let uv_off = w * h;
+    let clamp8 = |v: i32| v.clamp(0, 255) as u8;
+    for (j, (y_row, out_row)) in frame.data[..w * h]
+        .chunks_exact(w)
+        .zip(out.chunks_exact_mut(w * 3))
+        .enumerate()
+    {
+        let uv_row = &frame.data[uv_off + (j / 2) * w..][..w];
+        for (k, (y2, out6)) in y_row
+            .chunks_exact(2)
+            .zip(out_row.chunks_exact_mut(6))
+            .enumerate()
+        {
+            let (u, v) = (uv_row[k * 2] as i32 - 128, uv_row[k * 2 + 1] as i32 - 128);
+            let y0 = y2[0] as i32;
+            let y1 = y2[1] as i32;
+            out6.copy_from_slice(&[
+                clamp8(y0 + ((359 * v) >> 8)),
+                clamp8(y0 - ((88 * u + 183 * v) >> 8)),
+                clamp8(y0 + ((454 * u) >> 8)),
+                clamp8(y1 + ((359 * v) >> 8)),
+                clamp8(y1 - ((88 * u + 183 * v) >> 8)),
+                clamp8(y1 + ((454 * u) >> 8)),
+            ]);
+        }
+    }
+    Ok(Frame {
+        data: out,
+        metadata: FrameMetadata {
+            width: w as u32,
+            height: h as u32,
+            format: PixelFormat::Rgb24,
+            captured_at: frame.metadata.captured_at,
+            seq: frame.metadata.seq,
+        },
+    })
+}
+
 /// Конвертировать RGB24 в NV12.
 ///
 /// RGB → YCbCr матричное преобразование, U/V decimated 2x.
@@ -336,6 +397,7 @@ pub fn convert_to(frame: &Frame, target: PixelFormat) -> ConversionResult<Frame>
         (PixelFormat::Yuyv, PixelFormat::Nv12) => yuyv_to_nv12(frame),
         (PixelFormat::Yuyv, PixelFormat::Rgb24) => yuyv_to_rgb24(frame),
         (PixelFormat::Rgb24, PixelFormat::Nv12) => rgb24_to_nv12(frame),
+        (PixelFormat::Nv12, PixelFormat::Rgb24) => nv12_to_rgb24(frame),
         (from, to) => {
             warn!(?from, ?to, "unsupported conversion");
             Err(ConversionError::UnsupportedConversion { from, to })
@@ -582,6 +644,72 @@ mod tests {
                     let i = rgb_to_y_u8(r, g, b) as i32;
                     assert!((f - i).abs() <= 1, "rgb({r},{g},{b}): f32 {f} vs int {i}");
                 }
+            }
+        }
+    }
+
+    /// TG26-125: NV12 → RGB24 — размерности, формат, нейтральная хрома.
+    #[test]
+    fn nv12_to_rgb24_neutral_chroma() {
+        let (w, h) = (8u32, 6u32);
+        let mut data = vec![0u8; (w * h * 3 / 2) as usize];
+        // Y-плоскость: градиент; UV: нейтральная хрома (128,128).
+        for i in 0..(w * h) as usize {
+            data[i] = (i % 251) as u8;
+        }
+        for b in &mut data[(w * h) as usize..] {
+            *b = 128;
+        }
+        let frame = make_frame(data, w, h, PixelFormat::Nv12);
+        let rgb = nv12_to_rgb24(&frame).unwrap();
+        assert_eq!(rgb.metadata.format, PixelFormat::Rgb24);
+        assert_eq!(rgb.data.len(), (w * h * 3) as usize);
+        // Нейтральная хрома → R=G=B=Y.
+        for (i, px) in rgb.data.chunks_exact(3).enumerate() {
+            let y = (i % 251) as i32;
+            assert!(
+                (px[0] as i32 - y).abs() <= 1 && (px[1] as i32 - y).abs() <= 1 && (px[2] as i32 - y).abs() <= 1,
+                "px[{i}] = {px:?}, expected ~{y} (neutral chroma)"
+            );
+        }
+    }
+
+    #[test]
+    fn nv12_to_rgb24_wrong_format_fails() {
+        let frame = make_frame(vec![0; 16], 4, 2, PixelFormat::Yuyv);
+        assert!(nv12_to_rgb24(&frame).is_err());
+    }
+
+    /// Согласованность с f32-эталоном (ycbcr_to_rgb) на сэмплированной сетке.
+    #[test]
+    fn nv12_to_rgb24_matches_f32_reference() {
+        let (w, h) = (8u32, 6u32);
+        let mut data = vec![0u8; (w * h * 3 / 2) as usize];
+        let mut seed = 7u64;
+        let mut rnd = || -> u8 {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 56) as u8
+        };
+        for b in data.iter_mut() {
+            *b = rnd();
+        }
+        let frame = make_frame(data, w, h, PixelFormat::Nv12);
+        let rgb = nv12_to_rgb24(&frame).unwrap();
+        let d = &frame.data;
+        let uv_off = (w * h) as usize;
+        for j in 0..h as usize {
+            for i in 0..w as usize {
+                let y = d[j * w as usize + i] as f32;
+                let uv = uv_off + (j / 2) * w as usize + (i & !1);
+                let (u, v) = (d[uv] as f32 - 128.0, d[uv + 1] as f32 - 128.0);
+                let expect = ycbcr_to_rgb(y, u, v);
+                let got = &rgb.data[(j * w as usize + i) * 3..][..3];
+                assert!(
+                    (expect.0 as i32 - got[0] as i32).abs() <= 1
+                        && (expect.1 as i32 - got[1] as i32).abs() <= 1
+                        && (expect.2 as i32 - got[2] as i32).abs() <= 1,
+                    "px({i},{j}): f32 {expect:?} vs int {got:?}"
+                );
             }
         }
     }
