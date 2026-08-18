@@ -72,7 +72,7 @@ fn main() {
         .enable_time()
         .build()
         .expect("tokio rt");
-    rt.block_on(async move {
+    rt.block_on(async {
         use video_capture::{VideoSource, V4l2DirectSource};
 
         let mut src = V4l2DirectSource::new(&args.device, args.width, args.height, args.fps)
