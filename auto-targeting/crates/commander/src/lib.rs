@@ -6,6 +6,7 @@
 //! oscillation detector stack described in `docs/ARCHITECTURE.md` §1.4.
 
 pub mod anti_loop;
+pub mod bus_runner;
 pub mod commander;
 pub mod health;
 pub mod ota;
@@ -17,6 +18,7 @@ pub mod watchdogs;
 
 pub use anti_loop::{AntiLoopGuard, CorrectionCommand, GuardDecision};
 pub use commander::{Commander, CommanderError, CommanderHealth, CommanderResult};
+pub use common::CommanderConfig;
 pub use health::{HealthConfig, HealthServer, HealthStatus};
 pub use ota::{OtaClient, OtaConfig, OtaError, OtaResult, UpdateInfo};
 pub use pid::{PidConfig, PidController, PidPair};

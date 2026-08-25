@@ -90,6 +90,7 @@ cv-visualizer = { path = "crates/cv-visualizer", version = "0.1.0" }
 system-telemetry = { path = "crates/system-telemetry", version = "0.1.0" }
 target-tracker = { path = "crates/target-tracker", version = "0.1.0" }
 fc-adapter = { path = "crates/fc-adapter", version = "0.1.0" }
+fc-bridge = { path = "crates/fc-bridge", version = "0.1.0" }
 commander = { path = "crates/commander", version = "0.1.0" }
 shmem-buffer = { path = "crates/shmem-buffer", version = "0.1.0" }
 video-recorder = { path = "crates/video-recorder", version = "0.1.0" }
