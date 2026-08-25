@@ -24,9 +24,13 @@ use axum::{http::StatusCode, response::IntoResponse, routing::get, Json, Router}
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+#[cfg(unix)]
+use std::time::Duration;
+use std::time::Instant;
 use tokio::sync::watch;
-use tracing::{debug, info, warn};
+#[cfg(unix)]
+use tracing::warn;
+use tracing::info;
 
 /// Health status — shared state обновляемое из main loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +128,7 @@ impl HealthServer {
     /// Возвращает handle для shutdown.
     pub async fn run(&self) -> anyhow::Result<()> {
         // 1. Systemd READY=1
+        #[cfg(unix)]
         if self.config.enable_systemd_notify {
             match sd_notify::notify(true, &[sd_notify::NotifyState::Ready]) {
                 Ok(_) => info!("sent READY=1 to systemd"),
@@ -132,6 +137,7 @@ impl HealthServer {
         }
 
         // 2. Запускаем systemd notify loop в отдельной задаче
+        #[cfg(unix)]
         if self.config.enable_systemd_notify {
             let interval = Duration::from_secs(self.config.notify_interval_secs);
             tokio::spawn(async move {
@@ -164,7 +170,10 @@ impl HealthServer {
 
         // 4. Systemd STOPPING=1
         if self.config.enable_systemd_notify {
+            #[cfg(unix)]
             let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Stopping]);
+            #[cfg(not(unix))]
+            let _ = ();
         }
 
         Ok(())
@@ -280,6 +289,7 @@ async fn root_handler() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
     fn health_status_default() {

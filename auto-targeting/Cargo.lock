@@ -620,9 +620,12 @@ dependencies = [
  "async-trait",
  "axum",
  "chrono",
+ "clap",
  "common",
  "criterion",
+ "event-bus",
  "fc-adapter",
+ "fc-bridge",
  "parking_lot",
  "reqwest",
  "sd-notify",
@@ -635,6 +638,7 @@ dependencies = [
  "tokio-util",
  "tower",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

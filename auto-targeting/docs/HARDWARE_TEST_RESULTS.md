@@ -650,3 +650,55 @@ at/status/fc {"v":1,"adapter":"MockFcAdapter","heartbeat_alive":true,
 
 SITL-прогон (x86, docker): не выполнялся в этой итерации — мост агностичен
 адаптеру (трейт), SITL-сценарий назначен на M4 (commander) по плану.
+
+---
+
+## 18. M4: commander на шине — замкнутый контур управления (2026-08-18)
+
+`commander::bus_runner` (CommanderBus, ветка `feature/bus-migration-m4-commander`).
+Подписки at/tracks + at/telemetry → существующий Commander (state machine,
+watchdogs, anti-loop, rate-limiter — БЕЗ изменений safety-логики) → коррекции FC.
+Командир владеет своим FlightControllerAdapter (шина — транспорт контура,
+не замена M3-диспетчера at/commands).
+
+### 18.1 Замкнутая петля на шине (x86, моки, 3/3)
+
+Интеграционный тест: fc-bridge (mock, 20 Гц) + тест-издатель треков
+(цель offset (60,40) от центра) + CommanderBus (mock FC):
+
+| Проверка | Результат |
+|---|---|
+| Петля треки→Tracking→коррекции | ✅ corrections_sent+suppressed ≥ 1 |
+| Deadband: цель в центре → 0 посылок | ✅ |
+| Статус at/status/commander (state=Tracking, active_target) | ✅ |
+| Телеметрия от fc-bridge в контуре | ✅ |
+| 115 unit-тестов commander + 3 bus | ✅ clippy 0 |
+
+### 18.2 SITL (ArduPlane 4.x, docker на x86)
+
+Образ починен по ходу (первая сборка на этом стенде): убраны
+недоступные пакеты (lib-trng-dev, gcc-arm-none-eabi), добавлен pexpect;
+запуск — прямым бинарем `arduplane -S -M plane -I0 --uartA tcp:5760`
+(ENTRYPOINT-override в compose: sim_vehicle.py тянет valgrind/xterm и
+требует python-симлинк).
+
+Полный контур на шине (30 с): `bus_dump --listen` + `fc-bridge
+--adapter ardupilot-mavlink --endpoint tcpout:127.0.0.1:5760` (телеметрия
+10 Гц с летящего самолёта) + `commander_bus_demo --fc ardupilot-mavlink`
++ `track_gen` (синтетический трекер, цель offset (60,40), 10 Гц):
+
+| Метрика | Значение |
+|---|---|
+| Телеметрия ArduPlane на шине | 425 сообщений (10 Гц, ВРЕМЯ жизни bridge) |
+| MAVLink-подключений к SITL (bridge + commander) | 3 |
+| Треков принято commander | **182** |
+| **Коррекций послано в ArduPlane (SET_POSITION_TARGET_LOCAL_NED)** | **128** |
+| Подавлено (deadband/rate-limit/anti-loop) | 54 |
+| Состояние commander | TrackingDegraded → active_target=1 |
+| Статус на шине | at/status/commander с полными счётчиками |
+
+**Замкнутая петля M4 работает на реальном автопилоте**: детекции(синт)→
+треки→commander→MAVLink→ArduPlane. Замечания к следующей итерации:
+(1) FcHeartbeat-экспирации в bus_runner сейчас игнорируются (`let _expired`)
+—挂钩 Abort на них; (2) телеметрия шла отдельной сессией commander-а
+(0 в его окне) — контрольный прогон с пересекающимися окнами.

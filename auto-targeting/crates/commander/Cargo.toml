@@ -9,6 +9,7 @@ authors.workspace = true
 [dependencies]
 common = { workspace = true }
 fc-adapter = { workspace = true }
+event-bus = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
@@ -20,15 +21,20 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
-sd-notify = { workspace = true }
 anyhow = { workspace = true }
+clap = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 
 [dev-dependencies]
+fc-bridge = { workspace = true }
 tokio-test = { workspace = true }
 criterion = { workspace = true }
 common = { workspace = true }
 fc-adapter = { workspace = true }
+event-bus = { workspace = true }
+clap = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", features = ["json"] }
 tempfile = "3.10"
 
@@ -39,3 +45,6 @@ harness = false
 [[bench]]
 name = "watchdogs"
 harness = false
+
+[target.'cfg(unix)'.dependencies]
+sd-notify = "0.4"
