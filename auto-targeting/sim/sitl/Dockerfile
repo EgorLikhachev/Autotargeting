@@ -31,9 +31,6 @@ RUN apt-get update && apt-get install -y \
     libxslt1-dev \
     python3-lxml \
     libboost-all-dev \
-    lib-trng-dev \
-    gcc-arm-none-eabi \
-    binutils-arm-none-eabi \
     software-properties-common \
     xterm \
     screen \
@@ -48,7 +45,8 @@ RUN pip3 install --no-cache-dir \
     numpy \
     future \
     empy==3.3.4 \
-    ptyprocess
+    ptyprocess \
+    pexpect
 
 # Клонируем ArduPilot
 WORKDIR /ardupilot

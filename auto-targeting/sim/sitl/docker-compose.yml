@@ -30,27 +30,21 @@ services:
     image: auto-targeting-sitl:latest
     container_name: auto-targeting-sitl
 
-    # Модель Plane (самолёт) — соответствует нашему fixed-wing UAV
-    command: >
-      bash -c "
-      /ardupilot/build/sitl/bin/sim_vehicle.py
-      --vehicle ArduPlane
-      --frame plane
-      --instance 1
-      --no-mavproxy
-      --out=udp:0.0.0.0:14550
-      --map
-      "
-    # Альтернативная команда (без sim_vehicle.py, прямой SITL):
-    # command: >
-    #   bash -c "
-    #   cd /ardupilot &&
-    #   ./Tools/autotest/sim_vehicle.py
-    #   --vehicle ArduPlane
-    #   --frame plane
-    #   --no-mavproxy
-    #   --add-param-file=/sitl_params.parm
-    #   "
+    # Модель Plane (самолёт) — fixed-wing UAV.
+    # Прямой запуск собранного бинаря (CI-практика): физика — в процессе
+    # (--model plane), MAVLink TCP-сервер на 5760 (uart0), телеметрия
+    # в контейнер-сеть на 14550 (uart1). sim_vehicle.py не используется
+    # (тянет valgrind/xterm, требует каталог аппарата и python-sимлинк).
+    entrypoint:
+      - bash
+      - -c
+      - >-
+        cd /sitl_work &&
+        exec /ardupilot/build/sitl/bin/arduplane
+        -S -M plane -s 1 -I0
+        --defaults /ardupilot/Tools/autotest/models/plane.parm,/sitl_params.parm
+        --uartA tcp:5760
+        --uartC udpclient:0.0.0.0:14550
 
     ports:
       # TCP MAVLink — основной порт для companion computer

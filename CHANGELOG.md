@@ -12,6 +12,15 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **Commander on the bus (M4)**: commander::bus_runner — closed control
+  loop: at/tracks + at/telemetry subscriptions feed the existing Commander
+  (state machine, watchdogs, anti-loop, rate limiter — safety logic
+  unchanged); first track becomes active target; bbox-center offset ->
+  corrections via the owned FlightControllerAdapter; status at
+  at/status/commander. Closed-loop integration test on a real zenoh bus
+  (mock FC + fc-bridge telemetry): corrections flow for offset targets,
+  deadband suppresses centered ones. 115 unit + 3 bus tests green;
+  commander now builds clippy-clean on non-unix hosts (sd-notify gated).
 - **`fc-bridge` crate (M3)**: FC ↔ bus bridge over the
   FlightControllerAdapter trait — telemetry to at/telemetry at configured
   Hz (GPS/mode included), FC edge events (link/armed/mode) to
