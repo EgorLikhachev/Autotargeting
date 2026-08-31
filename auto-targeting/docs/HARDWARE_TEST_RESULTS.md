@@ -743,3 +743,35 @@ C++ копировал `init_w×init_h×3` байт (размеры исходн
 | Fallback на base64 (старый мост / сбой сегмента) | ✅ по построению (frame_shm опущен → старый путь) |
 | #12: bridge зависал навсегда после disconnect клиента | ✅ close+re-accept + SO_RCVTIMEO 30с + length-sanitize 64МБ |
 | Конфиг-совместимость | ✅ base64-клиенты работают с новым мостом без пересборки |
+
+---
+
+## 20. Этап 7: safety-фиксы (2026-08-31)
+
+Ветка `feature/safety-fixes`.
+
+### 20.1 FcHeartbeat/Abort экспирации в bus_runner (M4-followup #1)
+
+`process_watchdog_expiries()` больше не игнорируется: Degrade — внутри
+commander; **Abort → `commander.abort()` (RTL) + reset**. Корневое: цикл
+bus_runner и есть command/video-циклы — их watchdog-и кормятся каждый тик
+(иначе CommandLoop 100 мс истекал до первого трека).
+
+### 20.2 KNOWN_ISSUES #3: настоящий camera→NED transform
+
+Crude-маппинг `offset_x→east / offset_y→down` заменён на существовавший, но
+неиспользуемый `CameraToAngular::offset_to_ned_target_with_attitude`:
+пиксельный offset нормализуется по размеру кадра → угол через FOV → yaw с
+учётом текущего yaw дрона (NED). N/E/D = 0 (угловое сопровождение).
+Обязательно до реальных полётов — закрыто.
+
+### 20.3 Контрольный SITL-прогон (followup #2 — пересекающиеся окна)
+
+ArduPlane SITL: fc-bridge (40 с) + commander (30 с) + track_gen (22 с) —
+
+| Метрика | Значение |
+|---|---|
+| Треков принято | 203 |
+| **Телеметрия в окне командира** | **245** (было 0 — followup закрыт) |
+| Коррекций послано / подавлено | 136 / 67 |
+| Тесты commander | 115 unit + 3 bus зелёные, clippy 0 |

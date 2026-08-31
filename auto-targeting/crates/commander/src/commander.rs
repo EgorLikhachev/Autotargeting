@@ -88,6 +88,8 @@ pub struct Commander {
     fc: Box<dyn FlightControllerAdapter>,
     /// Rate limiter for FC commands.
     rate_limiter: CommandRateLimiter,
+    /// Camera→NED transform (crude-маппинг KNOWN_ISSUES #3 закрыт).
+    camera: crate::transform::CameraToAngular,
     /// Configuration (commander section).
     config: CommanderConfig,
     /// Currently tracked target ID (if in TRACKING state).
@@ -142,6 +144,9 @@ impl Commander {
             anti_loop,
             fc,
             rate_limiter,
+            camera: crate::transform::CameraToAngular::new(
+                crate::transform::CameraParams::default(),
+            ),
             config,
             active_target_id: None,
             last_command_at: None,
@@ -448,13 +453,26 @@ impl Commander {
             return Ok(());
         }
 
-        // Simplified mapping: yaw_rate → yaw, pitch_rate → pitch (as offset).
-        // Phase 6 will replace this with a proper camera-to-NED transform.
+        // KNOWN_ISSUES #3 fixed: настоящий camera→NED transform вместо
+        // crude offset_x→east / offset_y→down. Offset нормализуется по
+        // размеру кадра, конвертируется в угол через FOV, yaw — с учётом
+        // текущего yaw дрона (NED, не body). N/E/D остаются 0: это
+        // угловая коррекция удержания цели (типично для gimbal/yaw-only
+        // сопровождения fixed-wing).
+        let att = self.fc.attitude();
+        // offset_x/y в CorrectionCommand — ПИКСЕЛИ от центра кадра;
+        // FrameOffset ожидает нормализованные [-1,1] (±половина кадра).
+        let cam = self.camera.camera();
+        let norm = crate::transform::FrameOffset {
+            x: (cmd.offset_x / (cam.width as f32 / 2.0)).clamp(-1.0, 1.0),
+            y: (cmd.offset_y / (cam.height as f32 / 2.0)).clamp(-1.0, 1.0),
+        };
+        let ned = self.camera.offset_to_ned_target_with_attitude(norm, att.pitch, att.yaw);
         let target = common::PositionTargetNED {
             north: 0.0,
-            east: cmd.offset_x, // crude: lateral offset → east
-            down: cmd.offset_y, // crude: vertical offset → down
-            yaw: cmd.yaw_rate_dps.to_radians(),
+            east: 0.0,
+            down: 0.0,
+            yaw: ned.yaw,
         };
 
         if let Err(e) = self.fc.set_position_target_local_ned(target).await {

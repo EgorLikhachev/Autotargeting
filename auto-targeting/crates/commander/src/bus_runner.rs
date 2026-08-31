@@ -166,8 +166,26 @@ impl CommanderBus {
                 commander.feed_video_watchdog();
             }
 
-            // Watchdog-экспирации (Degrade обрабатывается внутри).
-            let _expired = commander.process_watchdog_expiries();
+            // Этот цикл и есть command/video-циклы — кормим их watchdog-и
+            // каждый тик (10 мс); иначе CommandLoop (100 мс, Abort) истекает
+            // на старте до первого трека.
+            commander
+                .watchdog_registry()
+                .feed(crate::watchdogs::WatchdogId::CommandLoop);
+            commander.feed_video_watchdog();
+
+            // Watchdog-экспирации: Degrade обрабатывается внутри commander;
+            // Abort (в т.ч. FcHeartbeat — потеря связи с FC) — принудительный
+            // переход + RTL (M4-followup #1: раньше игнорировался).
+            let expired = commander.process_watchdog_expiries();
+            for (id, action) in expired {
+                if matches!(action, crate::watchdogs::WatchdogAction::Abort) {
+                    tracing::error!(watchdog = id.as_str(), "watchdog expired -> ABORT");
+                    let _ = commander.abort().await;
+                    let _ = commander.reset();
+                    break;
+                }
+            }
 
             // Статус.
             if last_status.elapsed() >= self.cfg.status_interval {

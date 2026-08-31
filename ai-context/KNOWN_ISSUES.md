@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 1 | **Endianness length-prefix** (C++ native ↔ Rust big-endian) | P0 | ✅ fixed (D-002) | `shm_server.cpp` (htonl/ntohl) |
 | 2 | **Кадры в bridge шли base64** | P1 | ✅ **Fixed** (D-016/M6: именованный SHM-сегмент, base64 — fallback) | `shm_server.cpp`, `bridge_client.rs` |
-| 3 | **Crude coordinate transform** — `offset_x→east, offset_y→down` напрямую | P1 | Open | `commander.rs:451` |
+| 3 | **Crude coordinate transform** | P1 | ✅ **Fixed** (этап 7: CameraToAngular с attitude, пиксели→FOV-угол→NED yaw) | `commander.rs` |
 | 4 | **Упрощённый Kalman** — fixed-gain вместо 4×4 covariance | P2 | Open | `kalman.rs:79` |
 | 5 | **`select_target` без confirmation** — сразу Tracking без `lock_confirmation_frames` | P2 | Open | `commander.rs:254` |
 
