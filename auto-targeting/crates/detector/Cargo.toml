@@ -29,5 +29,6 @@ default = []
 cpu-onnx = ["cv-inference/cpu-onnx"]
 
 [dev-dependencies]
+chrono = { workspace = true }
 shmem-buffer = { workspace = true }
 event-bus = { workspace = true }

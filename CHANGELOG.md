@@ -12,6 +12,18 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **M6: SHM frame path to rknn-bridge (D-016)** — named /dev/shm segment
+  (double-buffered) replaces the base64 round-trip: init passes the segment
+  path/size, infer sends only a buffer index (~1.6MB off the wire + no
+  encode/decode). Transport ceiling eliminated — infer p50 29.5 ms equals
+  pure NPU time; detector FPS 27.2 (was 9.9; at conf 0.45, 12.5 — remainder
+  is the over-detect JSON response, a Phase 1.2 model issue). Base64 kept as
+  automatic fallback. Fixed en route: latent letterbox-contract bug (C++
+  copied init-dims bytes from the 640x640 letterboxed frame, cutting the
+  image bottom — affected both paths since TG26-35) and issue #12 (bridge
+  hung forever after client disconnect: close+re-accept, SO_RCVTIMEO,
+  length sanitize). New C++<->Rust round-trip integration test (green on
+  RK3588) closes the long-standing SDD §15 test gap.
 - **Commander on the bus (M4)**: commander::bus_runner — closed control
   loop: at/tracks + at/telemetry subscriptions feed the existing Commander
   (state machine, watchdogs, anti-loop, rate limiter — safety logic

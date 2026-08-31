@@ -69,11 +69,17 @@ void ShmServer::stop() {
 
 std::string ShmServer::receive_message() {
     if (client_fd_ < 0) {
-        // Accept a connection
+        // Accept a connection (blocking; the main loop is single-threaded).
         client_fd_ = accept(server_fd_, nullptr, nullptr);
         if (client_fd_ < 0) {
             return "";
         }
+        // KNOWN_ISSUES #12: не виснуть вечно на застрявшем клиенте —
+        // 30-секундный таймаут на чтение (максимальный разумный инференс
+        // плюс запас).
+        struct timeval tv {};
+        tv.tv_sec = 30;
+        setsockopt(client_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     }
 
     // Read 4-byte length prefix.
@@ -87,9 +93,20 @@ std::string ShmServer::receive_message() {
     uint32_t length_be = 0;
     ssize_t n = read(client_fd_, &length_be, 4);
     if (n != 4) {
+        // KNOWN_ISSUES #12: disconnect/timeout — закрываем и пере-accept
+        // следующего клиента (раньше мёртвый fd висел и read падал вечно
+        // в hot-loop без надежды на нового клиента).
+        close(client_fd_);
+        client_fd_ = -1;
         return "";
     }
     const uint32_t length = ntohl(length_be);
+    // Sanitize: повреждённый length-prefix не должен аллоцировать гигабайты.
+    if (length == 0 || length > 64u * 1024 * 1024) {
+        close(client_fd_);
+        client_fd_ = -1;
+        return "";
+    }
 
     // Read the message
     std::string message(length, '\0');
@@ -97,6 +114,8 @@ std::string ShmServer::receive_message() {
     while (total < length) {
         n = read(client_fd_, &message[total], length - total);
         if (n <= 0) {
+            close(client_fd_);
+            client_fd_ = -1;
             return "";
         }
         total += n;

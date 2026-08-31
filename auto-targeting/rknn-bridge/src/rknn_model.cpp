@@ -305,17 +305,27 @@ public:
         }
 
         // Copy the RGB24 packed frame into the zero-copy input tensor buffer.
-        // input_attr_ was set to UINT8/NHWC at load; size_with_stride accounts
-        // for NPU row alignment. For a 640x640x3 input the stride usually
-        // equals the row width (no padding), so a single memcpy works; we still
-        // honour w_stride to be safe on other resolutions.
-        const uint32_t row_bytes = input_width_ * 3;
+        // M6 fix: the client sends a FULL LETTERBOXED frame at the TENSOR's
+        // dims (e.g. 640x640 for a 640x480 source) — input_width_/height_ are
+        // the ORIGINAL frame dims used only for unprojection. Copy by the
+        // tensor attribute dims; the old code copied input_w*input_h*3 bytes
+        // and silently cut the bottom of the letterboxed image.
+        const uint32_t tensor_w = input_attr_.dim.width;
+        const uint32_t tensor_h = input_attr_.dim.height;
+        const uint32_t row_bytes = tensor_w * 3;
         const uint32_t w_stride = input_attr_.w_stride > 0 ? input_attr_.w_stride : row_bytes;
+        const size_t needed = static_cast<size_t>(row_bytes) * tensor_h;
+        if (frame_size < needed) {
+            std::cerr << "[RknnBackend] frame too small: " << frame_size
+                      << " < tensor " << needed << "
+";
+            return dets;
+        }
         uint8_t* dst = static_cast<uint8_t*>(input_mem_->virt_addr);
         if (w_stride == row_bytes) {
-            memcpy(dst, frame_data, static_cast<size_t>(row_bytes) * input_height_);
+            memcpy(dst, frame_data, needed);
         } else {
-            for (uint32_t y = 0; y < input_height_; ++y) {
+            for (uint32_t y = 0; y < tensor_h; ++y) {
                 memcpy(dst + static_cast<size_t>(y) * w_stride,
                        frame_data + static_cast<size_t>(y) * row_bytes,
                        row_bytes);

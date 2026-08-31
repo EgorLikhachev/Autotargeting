@@ -74,6 +74,8 @@ pub struct DetectorConfig {
     pub nms_threshold: f32,
     /// Сокет rknn-bridge (bridge-бэкенд).
     pub bridge_socket: String,
+    /// M6: путь SHM-сегмента кадров (пусто → base64-путь).
+    pub frame_shm_path: String,
     /// Завершение при тишине кольца.
     pub quiet_timeout: Duration,
     /// Период публикации статуса.
@@ -91,6 +93,7 @@ impl Default for DetectorConfig {
             confidence_threshold: 0.45,
             nms_threshold: 0.45,
             bridge_socket: "/tmp/rknn-bridge.sock".into(),
+            frame_shm_path: "/dev/shm/at-infer".into(),
             quiet_timeout: Duration::from_secs(5),
             status_interval: Duration::from_secs(5),
             max_duration: None,
@@ -197,6 +200,7 @@ fn build_backend(
     cfg: &DetectorConfig,
     w: u32,
     h: u32,
+    frame_shm_path: &str,
 ) -> Result<Box<dyn InferenceBackend>, DetectorError> {
     match cfg.backend {
         BackendKind::Bridge => {
@@ -212,6 +216,9 @@ fn build_backend(
                     input_format: "rgb24".into(),
                     confidence_threshold: cfg.confidence_threshold,
                     nms_threshold: cfg.nms_threshold,
+                    // M6: кадры через именованный SHM-сегмент (без base64).
+                    frame_shm: Some(frame_shm_path.to_string()),
+                    frame_shm_buffers: 2,
                     ..Default::default()
                 };
                 Ok(Box::new(cv_inference::RknnBridgeClient::new(bc)))
@@ -317,7 +324,7 @@ impl Detector {
             .ok_or_else(|| DetectorError::InvalidConfig("unsupported ring format".into()))?;
         tracing::info!(w, h, ?format, backend = ?self.cfg.backend, "detector attached");
 
-        let mut backend = build_backend(&self.cfg, w, h)?;
+        let mut backend = build_backend(&self.cfg, w, h, &self.cfg.frame_shm_path)?;
         backend.init().await?;
         tracing::info!(backend = backend.name(), "inference backend ready");
 

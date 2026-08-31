@@ -10,6 +10,7 @@
 #include "protocol.h"
 #include "rknn_model.h"
 #include "shm_server.h"
+#include "shm_frame_source.h"
 
 #include <chrono>
 #include <csignal>
@@ -105,6 +106,15 @@ bool parse_init_request(const std::string& json, InitRequest& req) {
     if (!find_string("input_format", req.input_format)) return false;
     if (!find_float("confidence_threshold", req.confidence_threshold)) return false;
     if (!find_float("nms_threshold", req.nms_threshold)) return false;
+    // M6: опциональный SHM-путь кадра (отсутствует → base64 fallback).
+    find_string("frame_shm", req.frame_shm);        // может отсутствовать
+    req.frame_shm_buffers = 0;
+    req.frame_shm_size = 0;
+    {
+        double d;
+        if (find_number("frame_shm_buffers", d)) req.frame_shm_buffers = static_cast<uint32_t>(d);
+        if (find_number("frame_shm_size", d)) req.frame_shm_size = static_cast<uint64_t>(d);
+    }
     return true;
 }
 
@@ -151,8 +161,13 @@ bool parse_infer_request(const std::string& json, InferRequest& req) {
 
     if (!find_uint64("frame_seq", req.frame_seq)) return false;
     if (!find_uint64("captured_at_ms", req.captured_at_ms)) return false;
-    req.shm_fd = -1;  // Will be received via SCM_RIGHTS
+    req.shm_fd = -1;
     req.shm_size = 0;
+    req.shm_buf = 0;  // M6: индекс буфера в именованном сегменте
+    {
+        uint64_t b;
+        if (find_uint64("frame_shm_buf", b)) req.shm_buf = static_cast<uint32_t>(b);
+    }
     return true;
 }
 
@@ -233,6 +248,10 @@ int run_bridge(const std::string& socket_path) {
 
     std::cerr << "[bridge] Ready. Waiting for init message...\n";
 
+    // M6: named SHM frame segment (opened on init if the client requests it).
+    ShmFrameSource frame_source;
+    InitRequest init_req{};  // zero-init: no shm path until init arrives
+
     // Main loop
     while (!g_should_stop && server.is_running()) {
         std::string msg = server.receive_message();
@@ -256,6 +275,22 @@ int run_bridge(const std::string& socket_path) {
                 req.model_path, req.input_width, req.input_height,
                 req.input_format, req.confidence_threshold, req.nms_threshold,
                 init_error);
+
+            if (ok && !req.frame_shm.empty()) {
+                std::string serr;
+                if (!frame_source.open(req.frame_shm, req.frame_shm_buffers,
+                                       req.frame_shm_size, serr)) {
+                    std::cerr << "[bridge] frame shm open failed: " << serr
+                              << " — falling back to base64" << std::endl;
+                } else {
+                    std::cerr << "[bridge] frame shm: " << req.frame_shm
+                              << " (" << req.frame_shm_buffers << " x "
+                              << req.frame_shm_size << " B)" << std::endl;
+                }
+            }
+            if (ok) {
+                init_req = req;  // запоминаем для расчёта размера кадра
+            }
 
             InitResponse resp;
             resp.ok = ok;
@@ -281,11 +316,26 @@ int run_bridge(const std::string& socket_path) {
                 continue;
             }
 
-            // Decode the inline frame data from the JSON `frame_data_b64` field.
-            // The SHM/SCM_RIGHTS zero-copy path is still TODO (SDD §15 #2); for
-            // now the Rust/Python client sends the RGB24 frame inline as base64.
-            std::string b64 = extract_frame_data_b64(msg);
-            std::vector<uint8_t> frame_data = base64_decode(b64);
+            // M6 (D-016): кадр из именованного SHM-сегмента, если он был
+            // объявлен в init; иначе — старый base64-путь (fallback).
+            std::vector<uint8_t> frame_data;
+            bool have_frame = false;
+            if (frame_source.is_open()) {
+                // Авторитетный размер кадра — то, что клиент объявил в init
+                // (letterboxed тензор, напр. 640x640x3).
+                const uint64_t expect = init_req.frame_shm_size;
+                std::string ferr;
+                have_frame = frame_source.read_frame(req.shm_buf, expect,
+                                                     frame_data, ferr);
+                if (!have_frame) {
+                    std::cerr << "[bridge] shm frame read failed: " << ferr
+                              << std::endl;
+                }
+            }
+            if (!have_frame) {
+                std::string b64 = extract_frame_data_b64(msg);
+                frame_data = base64_decode(b64);
+            }
 
             auto start = std::chrono::high_resolution_clock::now();
             auto dets = backend->infer(frame_data.data(), frame_data.size(), req.frame_seq);

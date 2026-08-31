@@ -25,6 +25,9 @@ struct Args {
     nms: f32,
     #[arg(long, default_value = "/tmp/rknn-bridge.sock")]
     bridge_socket: String,
+    /// M6: SHM-сегмент кадров (пусто — base64-путь).
+    #[arg(long, default_value = "/dev/shm/at-infer")]
+    frame_shm: String,
     /// Endpoint шины (zenoh).
     #[arg(long, default_value = "tcp/127.0.0.1:7447")]
     bus: String,
@@ -63,6 +66,7 @@ async fn main() {
         confidence_threshold: args.conf,
         nms_threshold: args.nms,
         bridge_socket: args.bridge_socket.clone(),
+        frame_shm_path: args.frame_shm.clone(),
         quiet_timeout: std::time::Duration::from_secs(args.quiet_timeout.max(1)),
         max_duration: (args.seconds > 0).then(|| std::time::Duration::from_secs(args.seconds)),
         ..DetectorConfig::default()

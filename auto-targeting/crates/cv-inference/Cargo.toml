@@ -70,3 +70,6 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 [[bench]]
 name = "nms"
 harness = false
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
