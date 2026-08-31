@@ -217,7 +217,7 @@ fn build_backend(
                     confidence_threshold: cfg.confidence_threshold,
                     nms_threshold: cfg.nms_threshold,
                     // M6: кадры через именованный SHM-сегмент (без base64).
-                    frame_shm: Some(frame_shm_path.clone()),
+                    frame_shm: Some(frame_shm_path.to_string()),
                     frame_shm_buffers: 2,
                     ..Default::default()
                 };
