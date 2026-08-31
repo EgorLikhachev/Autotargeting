@@ -141,19 +141,23 @@ bool ShmServer::receive_frame(ReceivedFrame& frame, std::string& error) {
 }
 
 bool ShmServer::send_response(const std::string& json) {
-    if (client_fd_ < 0) {
-        return false;
-    }
+    // A4 аудита: единый буфер префикс+payload и цикл по частичным записям/
+    // EINTR — одиночный write() мог рассинхронить фрейминг навсегда
+    // (сторона чтения уже имеет цикл).
+    uint32_t be = htonl(static_cast<uint32_t>(json.size()));
+    std::string buf;
+    buf.reserve(4 + json.size());
+    buf.append(reinterpret_cast<const char*>(&be), 4);
+    buf.append(json);
 
-    // 4-byte length prefix (canonical big-endian, matches Rust's to_be_bytes)
-    // + JSON payload.
-    const uint32_t length = static_cast<uint32_t>(json.size());
-    const uint32_t length_be = htonl(length);
-    if (write(client_fd_, &length_be, 4) != 4) {
-        return false;
-    }
-    if (write(client_fd_, json.data(), length) != static_cast<ssize_t>(length)) {
-        return false;
+    size_t total = 0;
+    while (total < buf.size()) {
+        ssize_t n = ::write(client_fd_, buf.data() + total, buf.size() - total);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        total += static_cast<size_t>(n);
     }
     return true;
 }

@@ -59,11 +59,22 @@ async fn commander_closes_loop_from_tracks_and_telemetry() {
     // Commander (bus-режим): mock FC, центр кадра 320×240, 4 с.
     let cmd_fc = fc_adapter::build_adapter(&common::FcConfig {
         adapter: "mock".into(),
+        heartbeat_timeout_ms: 10_000,
         ..Default::default()
     });
-    let mut commander = Commander::new(CommanderConfig::default(), cmd_fc);
+    let mut commander = Commander::new(
+        CommanderConfig {
+            command_loop_wdt_ms: 2_000,
+            inference_loop_wdt_ms: 2_000,
+            tracking_loop_wdt_ms: 2_000,
+            video_loop_wdt_ms: 2_000,
+            fc_heartbeat_wdt_ms: 10_000,
+            ..CommanderConfig::default()
+        },
+        cmd_fc,
+    );
     let bus_cfg = CommanderBusConfig {
-        frame_center: (320.0, 240.0),
+        frame_size: (640, 480),
         max_duration: Some(Duration::from_secs(4)),
         ..CommanderBusConfig::default()
     };
@@ -92,6 +103,7 @@ async fn commander_closes_loop_from_tracks_and_telemetry() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
+    // Мост работает 4с; tracks публикуются каждые 50мс в течение 30 итераций выше.
     let cmd_stats = cmd_task.await.unwrap().unwrap();
     let fc_stats = fc_task.await.unwrap().unwrap();
 
@@ -159,9 +171,20 @@ async fn commander_suppresses_centered_target() {
 
     let cmd_fc = fc_adapter::build_adapter(&common::FcConfig {
         adapter: "mock".into(),
+        heartbeat_timeout_ms: 10_000,
         ..Default::default()
     });
-    let mut commander = Commander::new(CommanderConfig::default(), cmd_fc);
+    let mut commander = Commander::new(
+        CommanderConfig {
+            command_loop_wdt_ms: 2_000,
+            inference_loop_wdt_ms: 2_000,
+            tracking_loop_wdt_ms: 2_000,
+            video_loop_wdt_ms: 2_000,
+            fc_heartbeat_wdt_ms: 10_000,
+            ..CommanderConfig::default()
+        },
+        cmd_fc,
+    );
     let cfg = CommanderBusConfig {
         max_duration: Some(Duration::from_secs(3)),
         ..CommanderBusConfig::default()
@@ -196,4 +219,58 @@ fn telemetry_smoke() {
     let t = TelemetrySample::minimal(1, 1.0, 2.0, 3.0, 4.0);
     let js = serde_json::to_string(&t).unwrap();
     assert!(js.contains("\"roll_deg\":1.0"));
+}
+
+/// A2: flood треков — цикл не голодает, завершается по max_duration,
+/// watchdog-экспирации обрабатываются (нет вечного зависания).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn track_flood_terminates_and_keeps_watchdogs_alive() {
+    let hub = EventBus::listen(BusConfig {
+        endpoint: "tcp/127.0.0.1:17463".into(),
+        ..BusConfig::default()
+    })
+    .await
+    .unwrap();
+    let pub_side = EventBus::connect("tcp/127.0.0.1:17463").await.unwrap();
+
+    let cmd_fc = fc_adapter::build_adapter(&common::FcConfig {
+        adapter: "mock".into(),
+        heartbeat_timeout_ms: 10_000,
+        ..Default::default()
+    });
+    let mut commander = Commander::new(
+        CommanderConfig {
+            command_loop_wdt_ms: 2_000,
+            inference_loop_wdt_ms: 2_000,
+            tracking_loop_wdt_ms: 2_000,
+            video_loop_wdt_ms: 2_000,
+            fc_heartbeat_wdt_ms: 10_000,
+            ..CommanderConfig::default()
+        },
+        cmd_fc,
+    );
+    let cfg = CommanderBusConfig {
+        frame_size: (640, 480),
+        max_duration: Some(Duration::from_secs(3)),
+        ..CommanderBusConfig::default()
+    };
+    let cmd_bus = EventBus::connect("tcp/127.0.0.1:17463").await.unwrap();
+    let cmd_task =
+        tokio::spawn(async move { CommanderBus::new(cfg).run(&mut commander, &cmd_bus).await });
+
+    let tracks_pub = pub_side.publish_tracks().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(700)).await;
+    // Flood: 3000 треков максимально быстро.
+    for seq in 1..=3000u64 {
+        tracks_pub.publish(&track_msg(seq, 380.0, 280.0)).await.unwrap();
+    }
+    // Цикл обязан завершиться по max_duration (3с), не застряв в дренаже.
+    let stats = tokio::time::timeout(Duration::from_secs(10), cmd_task)
+        .await
+        .expect("commander loop hung in drain")
+        .unwrap()
+        .unwrap();
+    assert!(stats.tracks_received > 0);
+    let _ = pub_side.close().await;
+    let _ = hub.close().await;
 }

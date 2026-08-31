@@ -169,6 +169,8 @@ pub struct CommanderConfig {
     pub inference_loop_wdt_ms: u64,
     pub tracking_loop_wdt_ms: u64,
     pub command_loop_wdt_ms: u64,
+    /// FcHeartbeat watchdog (мс; Abort при потере телеметрии FC).
+    pub fc_heartbeat_wdt_ms: u64,
     /// Deadband — if target offset (as fraction of frame) is less than this,
     /// no correction command is sent. Prevents micro-jitter.
     pub deadband_fraction: f32,
@@ -196,6 +198,7 @@ impl Default for CommanderConfig {
             inference_loop_wdt_ms: 200,
             tracking_loop_wdt_ms: 50,
             command_loop_wdt_ms: 100,
+            fc_heartbeat_wdt_ms: 1000,
             deadband_fraction: 0.05,
             loss_hysteresis_ms: 500,
             max_yaw_rate_dps: 30.0,

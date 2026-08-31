@@ -27,8 +27,10 @@ use crate::commander::Commander;
 /// Конфигурация bus-режима commander.
 #[derive(Debug, Clone)]
 pub struct CommanderBusConfig {
-    /// Центр кадра (X, Y) для offset-вычислений (пиксели).
-    pub frame_center: (f32, f32),
+    /// Размер кадра (w, h) — offset нормализуется к [-1,1] по полукадру
+    /// (A1 аудита: дальше вся цепочка — commander/anti_loop/transform —
+    /// работает в ДОЛЯХ кадра, пиксели существуют только здесь).
+    pub frame_size: (u32, u32),
     /// Максимальный возраст трека (кадры misses) для управления.
     pub max_track_misses: u32,
     /// Период статуса на шину.
@@ -40,7 +42,7 @@ pub struct CommanderBusConfig {
 impl Default for CommanderBusConfig {
     fn default() -> Self {
         Self {
-            frame_center: (320.0, 240.0),
+            frame_size: (640, 480),
             max_track_misses: 15,
             status_interval: Duration::from_secs(1),
             max_duration: None,
@@ -121,9 +123,22 @@ impl CommanderBus {
                 let _ = t; // поле t_ms — метка источника
             }
 
-            // Треки → петля управления.
-            while let Ok(track) = tracks.recv_timeout(Duration::from_millis(0)).await {
+            // Треки → петля управления. A2 аудита: бюджет на тик — иначе
+            // дренаж голодает watchdog-и (CommandLoop 100мс Abort срабатывал
+            // под нагрузкой → Idle → коррекции прекращались).
+            const TRACK_BUDGET: usize = 32;
+            let mut drained = 0usize;
+            while drained < TRACK_BUDGET {
+                let Ok(track) = tracks.recv_timeout(Duration::from_millis(0)).await else {
+                    break;
+                };
+                drained += 1;
                 stats.tracks_received += 1;
+                // Цикл дренажа — часть command-цикла: кормим каждый батч.
+                commander
+                    .watchdog_registry()
+                    .feed(crate::watchdogs::WatchdogId::CommandLoop);
+                commander.feed_video_watchdog();
 
                 // Выбор/подтверждение цели.
                 if commander.health_snapshot().active_target_id != Some(track.track_id) {
@@ -141,11 +156,13 @@ impl CommanderBus {
                     && commander.health_snapshot().active_target_id == Some(track.track_id)
                 {
                     let (cx, cy) = self.bbox_center(&track);
-                    let offset = (cx - self.cfg.frame_center.0, cy - self.cfg.frame_center.1);
+                    let (w, h) = self.cfg.frame_size;
+                    let offset = (
+                        (cx - w as f32 / 2.0) / (w as f32 / 2.0),
+                        (cy - h as f32 / 2.0) / (h as f32 / 2.0),
+                    );
                     let before = commander.health_snapshot().rate_limiter_sent;
-                    let res = commander
-                        .update(&[], Some(offset))
-                        .await;
+                    let res = commander.update(&[], Some(offset)).await;
                     if res.is_ok() {
                         let after = commander.health_snapshot().rate_limiter_sent;
                         if after > before {

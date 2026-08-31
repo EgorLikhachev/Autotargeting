@@ -405,6 +405,35 @@ mod multiprocess {
         remove_segment(&name);
     }
 
+    /// A5: слот с ДВУМЯ читателями (один убит) — ример обязан отказаться
+    /// (не стирать живого). Проверяем через ref_count вручную.
+    #[test]
+    #[ignore = "linux multiprocess SHM: needs examples built"]
+    fn shared_slot_reaper_refuses_multiholder() {
+        let name = format!("at-a5-{}.frames", std::process::id());
+        let _ = remove_segment(&name);
+        let cfg = cfg(4);
+        let prod = shmem_buffer::create_shared(&name, &cfg).expect("create");
+        prod.publish(&pattern(&cfg, 1), 1).unwrap();
+
+        // Два независимых потребителя берут ОДИН кадр.
+        let c1 = prod.consumer();
+        let c2 = prod.consumer();
+        let g1 = c1.latest().expect("g1");
+        let g2 = c2.latest().expect("g2");
+        assert_eq!(g1.frame_id(), g2.frame_id());
+
+        // Ример по живому свежему слоту: отказ (не stale).
+        let cons = attach_shared(&name).expect("attach");
+        let freed = shmem_buffer::recover_stale_slots(&cons, 0);
+        assert_eq!(freed, 0, "fresh shared slot must not be reaped");
+        drop(g1);
+        drop(g2);
+        drop(prod);
+        drop(cons);
+        remove_segment(&name);
+    }
+
     // Без внешних крейтов: kill(pid, SIGKILL) через libc уже в deps.
     unsafe fn libc_kill9(pid: u32) {
         unsafe {
