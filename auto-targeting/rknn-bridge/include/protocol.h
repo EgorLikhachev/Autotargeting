@@ -38,6 +38,10 @@ struct InitRequest {
     std::string input_format;  // "nv12", "rgb24", etc.
     float confidence_threshold;
     float nms_threshold;
+    // M6 (D-016): named SHM frame segment (optional; empty → base64 path).
+    std::string frame_shm;      // "/dev/shm/at-infer"
+    uint32_t frame_shm_buffers; // double buffering (2)
+    uint64_t frame_shm_size;    // per-buffer bytes (input_w*input_h*3)
 };
 
 struct InitResponse {
@@ -51,9 +55,10 @@ struct InitResponse {
 // Frame data is passed via shared memory (memfd), not the socket.
 struct InferRequest {
     uint64_t frame_seq;
-    int shm_fd;          // file descriptor passed via SCM_RIGHTS
-    size_t shm_size;     // size of the shared memory region
+    int shm_fd;          // legacy (unused, kept for compat)
+    size_t shm_size;     // legacy (unused)
     uint64_t captured_at_ms;
+    uint32_t shm_buf;    // M6: buffer index in the named SHM segment
 };
 
 struct InferResponse {

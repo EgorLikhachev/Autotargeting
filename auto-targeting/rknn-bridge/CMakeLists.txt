@@ -52,6 +52,7 @@ find_package(Threads REQUIRED)
 add_library(rknn_bridge STATIC
     src/rknn_model.cpp
     src/shm_server.cpp
+    src/shm_frame_source.cpp
     src/nms.cpp
     src/bridge_main.cpp
 )

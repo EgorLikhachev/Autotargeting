@@ -865,6 +865,7 @@ dependencies = [
  "cv-visualizer",
  "image",
  "jpeg-decoder",
+ "libc",
  "ndarray",
  "ort",
  "parking_lot",

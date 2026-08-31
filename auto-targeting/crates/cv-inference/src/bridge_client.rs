@@ -46,6 +46,11 @@ pub struct RknnBridgeConfig {
     pub connect_timeout_ms: u64,
     /// Таймаут ожидания ответа (мс).
     pub response_timeout_ms: u64,
+    /// M6 (D-016): именованный SHM-сегмент для кадров (None → base64).
+    /// Сегмент создаётся клиентом при init; кадры передаются без base64.
+    pub frame_shm: Option<String>,
+    /// Число буферов в сегменте (double buffering).
+    pub frame_shm_buffers: u32,
 }
 
 impl Default for RknnBridgeConfig {
@@ -60,6 +65,8 @@ impl Default for RknnBridgeConfig {
             nms_threshold: 0.45,
             connect_timeout_ms: 5000,
             response_timeout_ms: 1000,
+            frame_shm: None,
+            frame_shm_buffers: 2,
         }
     }
 }
@@ -91,6 +98,13 @@ struct InitRequest<'a> {
     input_format: &'a str,
     confidence_threshold: f32,
     nms_threshold: f32,
+    /// M6: путь именованного SHM-сегмента (нет → base64 на bridge).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame_shm: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame_shm_buffers: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame_shm_size: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,7 +124,12 @@ struct InferRequest<'a> {
     #[serde(rename = "type")]
     msg_type: &'a str,
     frame_seq: u64,
-    frame_data_b64: String,
+    /// None в shm-режиме (кадр лежит в сегменте).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame_data_b64: Option<String>,
+    /// M6: индекс буфера в SHM-сегменте.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    frame_shm_buf: Option<u32>,
     frame_width: u32,
     frame_height: u32,
     frame_format: &'a str,
@@ -201,6 +220,87 @@ pub struct RknnBridgeClient {
     #[allow(dead_code)]
     /// Время последнего health check.
     last_health_check: Option<Instant>,
+    /// M6: mmap SHM-сегмента кадров (см. FrameShm).
+    frame_shm: Option<FrameShm>,
+    /// Счётчик буферов (round-robin по frame_shm_buffers).
+    shm_buf_cursor: u32,
+}
+
+/// Владение именованным SHM-сегментом кадров (M6, D-016):
+/// создаётся при init, удаляется в Drop.
+struct FrameShm {
+    path: String,
+    ptr: *mut u8,
+    len: usize,
+    frame_size: usize,
+    buffers: u32,
+}
+
+// FrameShm: сырой mmap-указатель; доступ строго из владеющего клиента.
+unsafe impl Send for FrameShm {}
+
+impl FrameShm {
+    fn create(path: &str, frame_size: usize, buffers: u32) -> Result<Self, String> {
+        use std::fs::OpenOptions;
+        use std::os::unix::fs::OpenOptionsExt;
+        let len = frame_size * buffers as usize;
+        // O_CREAT|O_EXCL как в shmem-buffer: свежий сегмент.
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| format!("create {path}: {e}"))?;
+        file.set_len(len as u64)
+            .map_err(|e| format!("ftruncate {path}: {e}"))?;
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                std::os::fd::AsRawFd::as_raw_fd(&file),
+                0,
+            )
+        };
+        if ptr == libc::MAP_FAILED {
+            return Err(format!("mmap {path}"));
+        }
+        Ok(Self {
+            path: path.to_string(),
+            ptr: ptr as *mut u8,
+            len,
+            frame_size,
+            buffers,
+        })
+    }
+
+    /// Записать кадр в буфер с индексом (memcpy ~1.2 МБ).
+    fn write_frame(&mut self, index: u32, data: &[u8]) -> Result<(), String> {
+        if index >= self.buffers {
+            return Err(format!("buf index {index} >= {}", self.buffers));
+        }
+        if data.len() > self.frame_size {
+            return Err(format!(
+                "frame {} > buffer {}",
+                data.len(),
+                self.frame_size
+            ));
+        }
+        let dst = unsafe { self.ptr.add(index as usize * self.frame_size) };
+        unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len()) };
+        Ok(())
+    }
+}
+
+impl Drop for FrameShm {
+    fn drop(&mut self) {
+        unsafe {
+            libc::munmap(self.ptr as *mut _, self.len);
+        }
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 impl RknnBridgeClient {
@@ -212,6 +312,8 @@ impl RknnBridgeClient {
             backend_name: String::new(),
             output_classes: 0,
             last_health_check: None,
+            frame_shm: None,
+            shm_buf_cursor: 0,
         }
     }
 
@@ -358,6 +460,37 @@ impl InferenceBackend for RknnBridgeClient {
         let stream = self.connect_socket()?;
         self.stream = Some(stream);
 
+        // M6: при первом init создаём SHM-сегмент кадров (если запрошен).
+        // Формат bridged-кадра сегодня — letterboxed RGB24 input_size²
+        // (детектор подаёт его так), поэтому размер буфера фиксирован.
+        let mut frame_shm_path: Option<String> = None;
+        let mut frame_shm_buffers: Option<u32> = None;
+        let mut frame_shm_size: Option<u64> = None;
+        if self.config.frame_shm.is_some() && self.frame_shm.is_none() {
+            let path = self.config.frame_shm.clone().expect("checked");
+            // Сегмент мог остаться от крэша — пересоздаём.
+            let _ = std::fs::remove_file(&path);
+            // Размер: формат входа на сегодня rgb24 (letterbox в детекторе).
+            // Для nv12-инференса размер бы считался иначе; контракт D-016 —
+            // буфер = input_width*input_height*3.
+            let frame_size =
+                self.config.input_width as usize * self.config.input_height as usize * 3;
+            match FrameShm::create(&path, frame_size, self.config.frame_shm_buffers) {
+                Ok(shm) => {
+                    frame_shm_buffers = Some(shm.buffers);
+                    frame_shm_size = Some(shm.frame_size as u64);
+                    frame_shm_path = Some(shm.path.clone());
+                    self.frame_shm = Some(shm);
+                    info!(path = %path, "frame shm segment created");
+                }
+                Err(e) => {
+                    // Деградация: base64-путь остаётся рабочим.
+                    warn!(error = %e, "frame shm create failed — base64 fallback");
+                    self.config.frame_shm = None;
+                }
+            }
+        }
+
         // Отправить init
         let req = InitRequest {
             msg_type: "init",
@@ -367,6 +500,9 @@ impl InferenceBackend for RknnBridgeClient {
             input_format: &self.config.input_format,
             confidence_threshold: self.config.confidence_threshold,
             nms_threshold: self.config.nms_threshold,
+            frame_shm: frame_shm_path.as_deref(),
+            frame_shm_buffers,
+            frame_shm_size,
         };
         let json = serde_json::to_string(&req)
             .map_err(|e| InferenceError::BridgeProtocol(format!("serialize init: {e}")))?;
@@ -406,13 +542,25 @@ impl InferenceBackend for RknnBridgeClient {
             common::PixelFormat::Mjpeg => "mjpeg",
         };
 
-        // Frame data как base64 (упрощение для Phase 2 — в production SHM)
-        let frame_b64 = Self::base64_encode(&frame.data);
+        // M6: кадр через SHM-сегмент (round-robin по буферам), иначе base64.
+        let (frame_data_b64, frame_shm_buf) = if let Some(shm) = self.frame_shm.as_mut() {
+            let index = self.shm_buf_cursor % shm.buffers;
+            self.shm_buf_cursor = self.shm_buf_cursor.wrapping_add(1);
+            if let Err(e) = shm.write_frame(index, &frame.data) {
+                return Err(InferenceError::BridgeProtocol(format!(
+                    "shm write: {e}"
+                )));
+            }
+            (None, Some(index))
+        } else {
+            (Some(Self::base64_encode(&frame.data)), None)
+        };
 
         let req = InferRequest {
             msg_type: "infer",
             frame_seq: frame.metadata.seq,
-            frame_data_b64: frame_b64,
+            frame_data_b64,
+            frame_shm_buf,
             frame_width: frame.metadata.width,
             frame_height: frame.metadata.height,
             frame_format: format_str,
