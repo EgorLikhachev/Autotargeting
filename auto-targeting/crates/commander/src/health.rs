@@ -29,7 +29,7 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::watch;
 #[cfg(unix)]
-use tracing::warn;
+use tracing::{debug, warn};
 use tracing::info;
 
 /// Health status — shared state обновляемое из main loop.
