@@ -246,23 +246,17 @@ fn build_backend(
     }
 }
 
-/// Подготовка кадра кольца под выбранный бэкенд.
-///
-/// bridge: NV12 → RGB24 → letterbox 640×640 (контракт C++ unprojection);
-/// cpu-onnx/mock: исходный кадр как есть (бэкенд конвертирует сам).
-fn preprocess_for_backend(
-    guard: &FrameGuard,
+/// Конверсия КОПИИ кадра под бэкенд (вызывается после release guard —
+/// B1: слот не должен быть занят на время конверсии ~мс).
+fn preprocess_frame(
+    raw: &Frame,
     format: StorageFormat,
     backend: BackendKind,
 ) -> Result<Frame, DetectorError> {
-    let view = guard.view();
-    let meta = view.to_metadata();
-    let data = guard.to_vec();
     match (backend, format) {
         (BackendKind::Bridge, StorageFormat::Nv12) => {
-            let nv12 = Frame { data, metadata: meta };
-            let rgb = video_capture::nv12_to_rgb24(&nv12)?;
-            let (lb, params) = yolov8::letterbox(&rgb.data, rgb.metadata.width, rgb.metadata.height);
+            let rgb = video_capture::nv12_to_rgb24(raw)?;
+            let (lb, _) = yolov8::letterbox(&rgb.data, rgb.metadata.width, rgb.metadata.height);
             Ok(Frame {
                 data: lb,
                 metadata: FrameMetadata {
@@ -273,25 +267,21 @@ fn preprocess_for_backend(
                     seq: rgb.metadata.seq,
                 },
             })
-            .map(|f| {
-                let _ = params; // unprojection делает C++ по init-dims
-                f
-            })
         }
         (BackendKind::Bridge, StorageFormat::Rgb24) => {
-            let (lb, _) = yolov8::letterbox(&data, view.width, view.height);
+            let (lb, _) = yolov8::letterbox(&raw.data, raw.metadata.width, raw.metadata.height);
             Ok(Frame {
                 data: lb,
                 metadata: FrameMetadata {
                     width: yolov8::INPUT_SIZE,
                     height: yolov8::INPUT_SIZE,
                     format: PixelFormat::Rgb24,
-                    captured_at: meta.captured_at,
-                    seq: meta.seq,
+                    captured_at: raw.metadata.captured_at,
+                    seq: raw.metadata.seq,
                 },
             })
         }
-        (_, StorageFormat::Nv12) | (_, StorageFormat::Rgb24) => Ok(Frame { data, metadata: meta }),
+        (_, StorageFormat::Nv12) | (_, StorageFormat::Rgb24) => Ok(raw.clone()),
     }
 }
 
@@ -315,11 +305,14 @@ impl Detector {
         bus: &EventBus,
     ) -> Result<DetectorStats, DetectorError> {
         // Геометрия и формат — из первого кадра (ring хранит их в каждом слоте).
+        // B1 аудита: guard НЕ держится через build_backend+init (модель/коннект
+        // могут занять секунды) — снимаем геометрию и отпускаем слот.
         let first = wait_first(consumer, self.cfg.quiet_timeout).await?;
-        let (w, h, format) = {
+        let (w, h, format, first_id) = {
             let v = first.view();
-            (v.width, v.height, v.storage_format())
+            (v.width, v.height, v.storage_format(), v.frame_id)
         };
+        drop(first);
         let format = format
             .ok_or_else(|| DetectorError::InvalidConfig("unsupported ring format".into()))?;
         tracing::info!(w, h, ?format, backend = ?self.cfg.backend, "detector attached");
@@ -333,8 +326,8 @@ impl Detector {
 
         let mut stats = DetectorStats::default();
         let mut metrics = Metrics::new();
-        let mut last: u64 = 0;
-        let mut pending: Option<FrameGuard> = Some(first);
+        let mut last: u64 = first_id; // первый кадр уже учтён (слот отпущен)
+        let mut pending: Option<FrameGuard> = None;
         let started = Instant::now();
         let mut last_frame_at = Instant::now();
         let mut last_status = Instant::now();
@@ -363,13 +356,15 @@ impl Detector {
             last_frame_at = Instant::now();
             stats.frames_processed += 1;
 
-            // === Guard-дисциплина: препроцессинг (лёгкий) под guard,
-            // тяжёлый инференс — по КОПИИ, guard уже отпущен.
-            let (frame_id, ts_ns, prepared) = {
-                let prep = preprocess_for_backend(&guard, format, self.cfg.backend)?;
-                (guard.view().frame_id, guard.view().ts_ns, prep)
+            // === Guard-дисциплина (B1): под guard — ТОЛЬКО копия данных и
+            // метаданных; конверсия/letterbox/инференс — после release.
+            let (frame_id, ts_ns, raw_copy, raw_meta) = {
+                let v = guard.view();
+                (v.frame_id, v.ts_ns, guard.to_vec(), v.to_metadata())
             };
             drop(guard);
+            let raw = common::Frame { data: raw_copy, metadata: raw_meta };
+            let prepared = preprocess_frame(&raw, format, self.cfg.backend)?;
 
             let t_infer = Instant::now();
             // Инференс (bridge-путь блокирующий внутри async — как в

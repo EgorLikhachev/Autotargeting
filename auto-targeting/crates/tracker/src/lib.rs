@@ -119,6 +119,7 @@ impl Tracker {
             self.cfg.max_missed_frames,
             self.cfg.match_iou_threshold,
         )
+        .with_max_tracks(64)
         .with_auto_create(true);
 
         let mut frames_in: u64 = 0;

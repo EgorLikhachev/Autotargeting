@@ -99,6 +99,9 @@ pub struct MultiTargetTracker {
     /// If true, create new tracks for unmatched detections.
     /// Default: false (operator must explicitly create tracks).
     auto_create_tracks: bool,
+    /// B3 аудита: потолок числа активных треков. Без него Hungarian O(n³)
+    /// при over-detect модели (1207 треков в soak) съедал кадр.
+    max_tracks: usize,
 }
 
 impl MultiTargetTracker {
@@ -111,6 +114,7 @@ impl MultiTargetTracker {
             lock_confirmation_frames: 3,
             next_id: 1,
             auto_create_tracks: false,
+            max_tracks: 64,
         }
     }
 
@@ -123,6 +127,13 @@ impl MultiTargetTracker {
     }
 
     /// Enable automatic track creation for unmatched detections.
+    /// B3: потолок треков (default 64). Новые сверх лимита — reject с логом.
+    #[must_use]
+    pub fn with_max_tracks(mut self, max_tracks: usize) -> Self {
+        self.max_tracks = max_tracks.max(1);
+        self
+    }
+
     pub fn with_auto_create(mut self, enabled: bool) -> Self {
         self.auto_create_tracks = enabled;
         self
@@ -161,7 +172,9 @@ impl MultiTargetTracker {
             return;
         }
 
-        // Build cost matrix: cost[i][j] = 1 - IoU(track_i, detection_j)
+        // Build cost matrix: cost[i][j] = 1 - IoU(track_i, detection_j).
+        // NOTE(B3): n ограничен max_tracks — этого достаточно для бюджета
+        // кадра; полноценный sparse-solver — отдельная оптимизация.
         let track_ids: Vec<TargetId> = self.tracks.keys().copied().collect();
         let n = track_ids.len();
         let m = detections.len();
@@ -212,12 +225,27 @@ impl MultiTargetTracker {
             }
         }
 
-        // Optionally create new tracks for unmatched detections
+        // Optionally create new tracks for unmatched detections.
+        // B3: потолок — сверх лимита reject (защита Hungarian O(n³) и
+        // памяти от over-detect моделей).
         if self.auto_create_tracks {
+            let mut rejected = 0usize;
             for (j, det) in detections.iter().enumerate() {
                 if !matched_detections.contains(&j) {
+                    if self.tracks.len() >= self.max_tracks {
+                        rejected += 1;
+                        continue;
+                    }
                     self.create_track(det);
                 }
+            }
+            if rejected > 0 {
+                debug!(
+                    rejected,
+                    active = self.tracks.len(),
+                    limit = self.max_tracks,
+                    "new tracks rejected (max_tracks)"
+                );
             }
         }
 
@@ -492,5 +520,32 @@ mod tests {
         ]);
 
         assert_eq!(t.track_count(), 1);
+    }
+
+    /// B3: потолок треков — flood детекций не разгоняет n (Hungarian O(n³)).
+    #[test]
+    fn max_tracks_caps_flood() {
+        let mut t = MultiTargetTracker::new(60_000, 1000, 0.3)
+            .with_auto_create(true)
+            .with_max_tracks(64);
+        // 500 разнесённых детекций — все захотят новые треки.
+        for i in 0..500u32 {
+            let d = Detection {
+                bbox: common::BoundingBox {
+                    x: (i % 25) * 40,
+                    y: (i / 25) * 40,
+                    width: 20,
+                    height: 20,
+                },
+                class: "x".into(),
+                class_id: i,
+                confidence: 0.9,
+                frame_seq: 1,
+                detected_at: Utc::now(),
+            };
+            t.update(&[d]);
+        }
+        assert!(t.track_count() <= 64, "got {}", t.track_count());
+        assert!(t.track_count() > 0);
     }
 }
