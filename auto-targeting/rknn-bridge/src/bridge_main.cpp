@@ -321,9 +321,9 @@ int run_bridge(const std::string& socket_path) {
             std::vector<uint8_t> frame_data;
             bool have_frame = false;
             if (frame_source.is_open()) {
-                const uint64_t expect =
-                    static_cast<uint64_t>(init_req.input_width) *
-                    init_req.input_height * 3;
+                // Авторитетный размер кадра — то, что клиент объявил в init
+                // (letterboxed тензор, напр. 640x640x3).
+                const uint64_t expect = init_req.frame_shm_size;
                 std::string ferr;
                 have_frame = frame_source.read_frame(req.shm_buf, expect,
                                                      frame_data, ferr);

@@ -472,11 +472,14 @@ impl InferenceBackend for RknnBridgeClient {
             let path = self.config.frame_shm.clone().expect("checked");
             // Сегмент мог остаться от крэша — пересоздаём.
             let _ = std::fs::remove_file(&path);
-            // Размер: формат входа на сегодня rgb24 (letterbox в детекторе).
-            // Для nv12-инференса размер бы считался иначе; контракт D-016 —
-            // буфер = input_width*input_height*3.
-            let frame_size =
-                self.config.input_width as usize * self.config.input_height as usize * 3;
+            // Размер буфера = то, что клиент РЕАЛЬНО шлёт: детектор подаёт
+            // letterboxed INPUT_SIZE² RGB24 (тензор модели), а не исходный
+            // кадр input_width×input_height. Контракт D-016.
+            let tensor = std::cmp::max(
+                self.config.input_width as usize,
+                self.config.input_height as usize,
+            );
+            let frame_size = tensor * tensor * 3;
             match FrameShm::create(&path, frame_size, self.config.frame_shm_buffers) {
                 Ok(shm) => {
                     frame_shm_buffers = Some(shm.buffers);
