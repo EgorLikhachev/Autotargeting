@@ -7,7 +7,7 @@
 | # | Расхождение | Приоритет | Статус | Где |
 |---|---|---|---|---|
 | 1 | **Endianness length-prefix** (C++ native ↔ Rust big-endian) | P0 | ✅ fixed (D-002) | `shm_server.cpp` (htonl/ntohl) |
-| 2 | **SCM_RIGHTS не реализован** — frame идёт base64 inline | P1 | Open (фундамент: крейт shmem-buffer, D-013 — memfd готов к передаче; интеграция bridge — отдельная задача) | `shm_server.cpp`, `bridge_client.rs` |
+| 2 | **Кадры в bridge шли base64** | P1 | ✅ **Fixed** (D-016/M6: именованный SHM-сегмент, base64 — fallback) | `shm_server.cpp`, `bridge_client.rs` |
 | 3 | **Crude coordinate transform** — `offset_x→east, offset_y→down` напрямую | P1 | Open | `commander.rs:451` |
 | 4 | **Упрощённый Kalman** — fixed-gain вместо 4×4 covariance | P2 | Open | `kalman.rs:79` |
 | 5 | **`select_target` без confirmation** — сразу Tracking без `lock_confirmation_frames` | P2 | Open | `commander.rs:254` |
@@ -22,7 +22,7 @@
 | 9 | **`v4l` crate давал 21 FPS vs 100 у v4l2-ctl** | P0 → ✅ | **Fixed**: `v4l2_direct.rs` (прямой libc ioctl) → 32 FPS |
 | 10 | **SyntheticVideoSource channel bound=1** при infinite (back-pressure deadlock) | P1 → ✅ | **Fixed**: `(fps).clamp(3,30)` + `try_send` |
 | 11 | **`v4l` crate ВИСНЕТ на gspca-драйвере** (PS Eye/ov534): start() ок, recv() ни кадра | P0 для gspca | Обход: `--backend direct` (примеры уже поддерживают); на UVC — работает, но медленно |
-| 12 | **rknn-bridge без таймаутов** — однопоточный сервер может зависнуть на мёртвом клиентском сокете | P2 | Open (рестарт лечит; найдено при PS Eye-тесте) |
+| 12 | **rknn-bridge без таймаутов** | P2 | ✅ **Fixed** (M6: re-accept после disconnect + SO_RCVTIMEO 30с + length-sanitize) |
 
 ## Средовые ограничения
 
