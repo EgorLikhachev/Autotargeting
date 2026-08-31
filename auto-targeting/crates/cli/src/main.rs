@@ -47,12 +47,12 @@ async fn main() -> Result<()> {
             else {
                 unreachable!()
             };
-            // Первый процесс на хосте поднимает listener шины.
-            let bus = bus_console::connect_bus(&config, true).await?;
+            // Монитор — подключается (listener держит якорь config-svc).
+            let bus = bus_console::connect_bus(&config, false).await?;
             bus_console::run_monitor(&bus, &topics, max_len).await
         }
         RunMode::ReplBus => {
-            let bus = bus_console::connect_bus(&config, true).await?;
+            let bus = bus_console::connect_bus(&config, false).await?;
             bus_console::run_repl(&bus).await
         }
         RunMode::ConfigSvc => {
