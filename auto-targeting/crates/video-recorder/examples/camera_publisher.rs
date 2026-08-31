@@ -78,6 +78,10 @@ fn main() {
         height: args.height,
         format: shmem_buffer::StorageFormat::Nv12,
     };
+    // Сервисный контекст: осиротевший сегмент от крэшнутого экземпляра —
+    // норма; мы владелец, пересоздаём (attach-потребители переподключатся
+    // по quiet-timeout/restart).
+    let _ = shmem_buffer::remove_segment(&args.name);
     let producer = match shmem_buffer::create_shared(&args.name, &ring_cfg) {
         Ok(p) => p,
         Err(shmem_buffer::RingError::SegmentExists(n)) => {
