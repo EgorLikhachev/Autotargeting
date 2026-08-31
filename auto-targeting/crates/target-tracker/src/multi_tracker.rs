@@ -154,10 +154,25 @@ impl MultiTargetTracker {
     /// update matched tracks, age unmatched tracks.
     pub fn update(&mut self, detections: &[Detection]) {
         if self.tracks.is_empty() {
-            // No tracks — optionally create some
+            // Bootstrap: кадровая цена ошибки — кап и здесь (B3: раньше
+            // первый кадр с ~1000 детекций создавал 1000 треков в обход
+            // гейта в основной ветке).
             if self.auto_create_tracks {
+                let mut rejected = 0usize;
                 for det in detections {
+                    if self.tracks.len() >= self.max_tracks {
+                        rejected += 1;
+                        continue;
+                    }
                     self.create_track(det);
+                }
+                if rejected > 0 {
+                    debug!(
+                        rejected,
+                        active = self.tracks.len(),
+                        limit = self.max_tracks,
+                        "bootstrap: new tracks rejected (max_tracks)"
+                    );
                 }
             }
             return;
