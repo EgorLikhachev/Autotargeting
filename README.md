@@ -257,16 +257,22 @@ Autotargeting/                     # git root (GitHub front door)
 ├── .github/                       # CI workflows + issue/PR templates
 └── auto-targeting/                # Rust workspace + C++ bridge
     ├── crates/
-    │   ├── common/                # shared types, errors, TOML config
-    │   ├── video-capture/         # V4L2 (v4l + direct ioctl) + synthetic + replay
-    │   ├── cv-inference/          # InferenceBackend trait + ONNX + rknn-bridge client
+    │   ├── common/                # shared types, errors, TOML config (+[bus])
+    │   ├── video-capture/         # V4L2 (direct ioctl) + synthetic + replay + convert
     │   ├── yolov8/                # pure-Rust letterbox + postprocess (NMS)
-    │   ├── cv-visualizer/         # headless annotation (boxes + labels → JPEG/JSONL)
+    │   ├── cv-inference/          # InferenceBackend + ONNX + rknn-bridge client (SHM)
+    │   ├── cv-visualizer/         # annotation + OSD (draw_osd)
     │   ├── system-telemetry/      # RSS, CPU/NPU temp, latency p50/p95
-    │   ├── target-tracker/        # IoU + Kalman + Hungarian
-    │   ├── fc-adapter/            # FlightControllerAdapter trait + Mock + SITL MAVLink
-    │   ├── commander/             # state machine + watchdogs + anti-loop guard
-    │   └── cli/                   # auto-targeting binary + interactive REPL
+    │   ├── target-tracker/        # Kalman + Hungarian (library)
+    │   ├── fc-adapter/            # FlightControllerAdapter: Mock/SITL/ArduPilot
+    │   ├── shmem-buffer/          # TG26-160: SPMC frame ring in /dev/shm
+    │   ├── event-bus/             # D-014: Zenoh typed pub/sub + bus_dump/track_gen
+    │   ├── detector/              # TG26-35: ring → NPU → at/detections
+    │   ├── tracker/               # M2: at/detections → at/tracks
+    │   ├── fc-bridge/             # M3: FC ↔ bus (telemetry/commands/events)
+    │   ├── video-recorder/        # TG26-125: MP4 + OSD, camera_publisher example
+    │   ├── commander/             # state machine + watchdogs + anti-loop + bus_runner
+    │   └── cli/                   # auto-targeting: REPL + bus-mon/repl-bus/config
     ├── rknn-bridge/               # C++ NPU microservice (zero-copy rknn_set_io_mem)
     ├── docs/                      # SDD-SPEC, ARCHITECTURE, KPI, SAFETY, ADR, reports
     ├── scripts/                   # model conversion, device setup, hardware tests

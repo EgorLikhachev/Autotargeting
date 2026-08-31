@@ -12,6 +12,28 @@ is incomplete).
 ## [Unreleased]
 
 ### Added
+- **Stage 8: systemd composition + 30-min soak (closes run_full)** — 8
+  services (bus anchor/config-svc, rknn-bridge, camera, detector, tracker,
+  fc-bridge, commander-bus, recorder; shared autotarget.env,
+  Restart=always, new commander_bus service bin). Soak on RK3588: 30/30
+  snapshots all-active, zero restarts, RSS +5.4MB/30min (~7MB/h, 7x under
+  the 8h KPI), detector stable 11-12 FPS, recorder 238MB artifact. First
+  sustained NPU thermal measurement: 83-87C — heatsink/airflow flagged
+  for flight tests. En-route fixes: camera --seconds 0 = infinite +
+  stale-segment self-heal; bus-mon/repl-bus connect mode (anchor is
+  config-svc).
+- **Stage 7 safety fixes**: watchdog Abort hook in the commander bus loop
+  (Abort actions now trigger RTL+reset; the loop feeds its own
+  CommandLoop/VideoLoop watchdogs); KNOWN_ISSUES #3 closed — crude
+  offset->east/down replaced with the real CameraToAngular transform
+  (pixels -> FOV angle -> NED yaw with drone attitude). SITL: telemetry
+  in commander window 245 (was 0), 136 corrections.
+- **M5: operator console on the bus** — cli::bus_console + subcommands:
+  bus-mon (at/** monitor), repl-bus (FC commands via the bus + live
+  tracks/telemetry/statuses), config-svc/config-get (pub/sub-ack config
+  protocol; zenoh-query unreliable in scouting-off peer topology —
+  documented). [bus] config section (AT_BUS__ENDPOINT). 2/2 bus
+  integration tests + 20 lib.
 - **M6: SHM frame path to rknn-bridge (D-016)** — named /dev/shm segment
   (double-buffered) replaces the base64 round-trip: init passes the segment
   path/size, infer sends only a buffer index (~1.6MB off the wire + no

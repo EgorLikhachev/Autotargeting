@@ -10,16 +10,15 @@ Rust workspace + C++ `rknn-bridge` microservice for the Auto-Targeting System
 
 ## Status
 
-🟢 **Phase 1.1 (minimal CV loop) — validated on real hardware.**
+🟢 **Компонентная архитектура завершена и провалидирована (2026-08-31).**
 
-- ✅ Cargo workspace with **10 crates**, **294 unit tests** passing
-- ✅ C++ `rknn-bridge`: **6 NMS tests**, linked to `librknnrt.so` 2.3.0
-- ✅ End-to-end detections on RK3588 NPU (zero-copy, **~29 ms** inference, **~34 FPS**)
-- ✅ Live camera demo → annotated video (`examples/live_camera_demo.rs`)
-- ✅ SHM ring buffer for multi-consumer frames (`shmem-buffer`, TG26-160: 24/24 tests, ADR D-013)
-- ✅ Anti-loop protection: state machine, watchdogs, deadband, rate limiter, oscillation detector
-- ✅ `MockFcAdapter` (in-memory) + `SittlMavlinkAdapter` (UDP MAVLink) — both working
-- 🚧 `ArduPilotMavlinkAdapter` is still a stub (real FC integration = Phase 2)
+- ✅ **17 crates**; кадры — SHM-кольцо (TG26-160), события — шина Zenoh (D-014)
+- ✅ Все компоненты на шине (M0–M5): detector/tracker/fc-bridge/commander/recorder/camera + консоль
+- ✅ **Detector 27 FPS** — SHM frame path to bridge (D-016; was 9.9 via base64)
+- ✅ Замкнутая петля на ArduPlane SITL: 182 трека → 128 коррекций
+- ✅ **systemd-композиция (8 сервисов)**, soak 30 мин: 0 падений, RSS +5.4 МБ
+- ✅ Anti-loop + watchdogs + настоящий camera→NED transform (этап 7)
+- 🔜 Phase 1.2: датасет+fine-tune (over-detect); охлаждение NPU (83–87 °C sustained)
 
 See [`docs/PROJECT_REPORT.md`](docs/PROJECT_REPORT.md) for the full results
 report and [`docs/HARDWARE_TEST_RESULTS.md`](docs/HARDWARE_TEST_RESULTS.md) for
@@ -149,7 +148,11 @@ auto-targeting/
 │   ├── yolov8/           # pure-Rust letterbox + postprocess (NMS)
 │   ├── cv-visualizer/    # headless annotation (boxes + labels → JPEG/JSONL)
 │   ├── system-telemetry/ # RSS, CPU/NPU temp, latency p50/p95
-│   ├── shmem-buffer/     # TG26-160: SPMC frame ring in shared memory (memfd)
+│   ├── shmem-buffer/     # TG26-160: SPMC frame ring (/dev/shm)
+│   ├── event-bus/        # D-014: Zenoh bus + bus_dump/track_gen examples
+│   ├── detector/         # TG26-35: ring→NPU→at/detections (D-015/D-016)
+│   ├── tracker/          # M2: at/detections→at/tracks
+│   ├── fc-bridge/        # M3: FC↔bus
 │   ├── target-tracker/   # KalmanFilter2D + single-target tracker (Phase 1.2)
 │   ├── fc-adapter/       # FlightControllerAdapter trait + Mock + SITL MAVLink
 │   ├── commander/        # state machine + watchdogs + anti-loop guard

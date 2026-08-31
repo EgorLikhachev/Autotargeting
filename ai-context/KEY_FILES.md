@@ -25,10 +25,12 @@ auto-targeting/                  # корень репо (GitHub front-door)
     │   ├── system-telemetry/    # RSS/temp/FPS/latency
     │   ├── target-tracker/      # Kalman + Hungarian multi-target
     │   ├── fc-adapter/          # MAVLink (Mock/SITL/ArduPilot)
-    │   ├── shmem-buffer/        # TG26-160: SPMC кольцо в SHM (POSIX shm/mmap)
-    │   ├── video-recorder/      # TG26-125: рекордер-потребитель (ffmpeg+OSD)
-    │   ├── event-bus/           # D-014: шина событий на Zenoh (peer-to-peer)
-    │   ├── detector/            # TG26-35: детектор ring→NPU→шина (ADR D-015)
+    │   ├── shmem-buffer/        # TG26-160: SPMC кольцо в SHM (D-013)
+    │   ├── video-recorder/      # TG26-125: рекордер (ffmpeg+OSD, M1-статусы)
+    │   ├── event-bus/           # D-014: шина Zenoh + bus_dump/track_gen
+    │   ├── detector/            # TG26-35: ring→NPU→шина (D-015, SHM-путь D-016)
+    │   ├── tracker/             # M2: at/detections → at/tracks (пакет tracker-crate)
+    │   ├── fc-bridge/           # M3: FC ↔ шина (телеметрия/команды/события)
     │   ├── commander/           # StateMachine + anti-loop + PID + safety
     │   └── cli/                 # бинарь auto-targeting (REPL/scenario/health)
     ├── rknn-bridge/             # C++ микросервис NPU (CMake)
@@ -53,6 +55,10 @@ auto-targeting/                  # корень репо (GitHub front-door)
 | Direct capture bench | `video-capture/examples/direct_capture_bench.rs` | `cargo run -p video-capture --example direct_capture_bench --features v4l2-direct` |
 | Soak 30 min | `cv-inference/examples/soak.rs` | `./scripts/soak_30min.sh` |
 | rknn-bridge (C++) | `rknn-bridge/src/bridge_main.cpp` | `cd rknn-bridge/build && ./rknn-bridge` |
+| **Трекер** | `tracker/src/main.rs` | `tracker --bus tcp/127.0.0.1:7447` |
+| **FC-мост** | `fc-bridge/src/main.rs` | `fc-bridge --adapter mock --bus ...` |
+| **Commander (сервис)** | `commander/src/bin/commander_bus.rs` | `commander_bus --fc mock --bus ...` |
+| **bus-mon / repl-bus / config** | `cli/src/bus_console.rs` | `auto-targeting bus-mon \| repl-bus \| config-svc` |
 | **SHM producer** | `shmem-buffer/examples/shmem_producer.rs` | `cargo run --release -p shmem-buffer --example shmem_producer -- --name demo.frames` |
 | **SHM consumer** | `shmem-buffer/examples/shmem_consumer.rs` | `... --example shmem_consumer -- --name demo.frames --mode next` |
 | **Видеорекордер** | `video-recorder/src/main.rs` | `video-recorder --name autotarget.frames --out rec.mp4 --osd --font ...` |

@@ -26,7 +26,8 @@
 - **Conventional Commits**: `feat(...):`, `fix(...):`, `docs(...):`, `chore(...)`, `perf(...)`, `refactor(...)`
 - Скоупы — имена крейтов: `common`, `video-capture`, `cv-inference`, `yolov8`, `rknn`, `hw`, `ci`, `deps`...
 - Каждый коммит — с подробным body (что, зачем, какой критерий закрывает)
-- Branch off `main`, имя ветки `<type>/<scope>-<topic>`
+- По умолчанию работаем в `main` (малые правки); фича-ветки — для крупных
+  этапов, после merge — удалять локально и на remote (текущее состояние: main-only)
 - Не переписывай историю без явного разрешения пользователя
 - Коммить и пушь только по явной просьбе пользователя
 - Safety-critical изменения (`commander/`, `fc-adapter/`, `target-tracker/`, watchdogs) — требуют 2 аппрува + тесты state-machine/oscillation

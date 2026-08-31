@@ -1,7 +1,7 @@
-# План перевода компонентов на шину Zenoh
+# План перевода компонентов на шину Zenoh — ✅ ВЫПОЛНЕН
 
-**Дата:** 2026-08-18 · **Шина:** `event-bus` (D-014, Zenoh 1.x)
-**Текущий статус:** детектор (TG26-35) **уже на шине** — `at/detections` +
+**Дата:** 2026-08-18 → завершён 2026-08-31 · **Шина:** `event-bus` (D-014)
+**Итог:** все фазы M0–M6 + safety + композиция выполнены; ветки слиты, main-only. — `at/detections` +
 `at/status/detector` работают в боевом контуре на RK3588 (293/293 событий).
 
 ## 0. Принципы миграции
@@ -36,43 +36,43 @@ CLI/GCS:   подписан на всё, публикует at/commands
 
 ## 2. Фазы (по нарастанию риска)
 
-### M0 — Контракты и QoS (2–3 ч)
+### ✅ M0 — Контракты и QoS (2–3 ч)
 - `event-bus`: `TelemetrySample` расширить (GPS/батарея/режим), добавить
   `CommandMsg`, `TrackMsg`, `FcEvent`, `StatusEnvelope`; поле версии `v`.
 - reliable-put для `at/commands` (consistency zenoh).
 - **Готовность:** serde-roundtrip всех типов (тест); reliable проверен A/B.
 
-### M1 — Статусы существующих компонентов (3–4 ч, риск минимален)
+### ✅ M1 — Статусы существующих компонентов (3–4 ч, риск минимален)
 - `camera_publisher` → `at/status/camera` (fps, дропы, формат, dims);
 - `video-recorder` → `at/status/recorder` (кадры, jumps, путь файла);
 - **Готовность:** подписчик на стенде видит статусы обоих.
 
-### M2 — Трекер (8–10 ч, чистое добавление)
+### ✅ M2 — Трекер (8–10 ч, чистое добавление)
 - Крейт `tracker`: подписка `at/detections` → Kalman+Hungarian
   (`target-tracker`) → `at/tracks`
   (`TrackMsg{track_id, bbox, velocity, class, conf, age, frame_seq}`);
 - при необходимости пиксельного контекста — кадр из кольца по `frame_seq`.
 - **Готовность:** треки из живых детекций на стенде; e2e в бюджете.
 
-### M3 — fc-adapter: MAVLink ↔ шина (8–12 ч, safety-зона)
+### ✅ M3 — fc-adapter: MAVLink ↔ шина (8–12 ч, safety-зона)
 - MAVLink-нить → `at/telemetry` (rate-limited) + `at/fc_events`;
   подписка `at/commands` → MAVLink; heartbeat в `at/status/fc`.
 - **Готовность:** телеметрия АП на шине; команда шины доходит до FC (SITL);
   тайминги в пределах watchdog-бюджетов commander.
 
-### M4 — commander на шине (6–8 ч)
+### ✅ M4 — commander на шине (6–8 ч)
 - Подписки: `at/tracks`, `at/telemetry`, `at/fc_events`;
   публикация `at/commands` — state machine/anti-loop/watchdogs без изменений.
 - **Готовность:** замкнутый контур детекция→трек→команда целиком на шине
   (SITL-сценарий).
 
-### M5 — Управление и конфигурация (6–8 ч)
+### ✅ M5 — Управление и конфигурация (6–8 ч)
 - `cli`/REPL: подписка на статусы/треки/телеметрию, публикация команд;
 - `at/config`: конфиг-сервис (zenoh query) + `at/config_ack`;
 - GCS-мост (будущее): тот же контракт поверх TCP (R10) — смена кода не нужна.
 - **Готовность:** оператор видит и управляет всем через шину.
 
-### M6 — rknn-bridge: устранение base64-потолка (10–14 ч, performance)
+### ✅ M6 — rknn-bridge: устранение base64-потолка (10–14 ч, performance) — реализовано именованным SHM-сегментом (D-016), не SCM_RIGHTS
 - **Вариант B (предпочтителен)**: SCM_RIGHTS/SHM-мост (SDD §15 #2) — кадры
   мимо шины; bridge публикует `at/status/bridge`;
 - Вариант A: кадры 640² через zenoh-cpp (замерить ~1.2 МБ payload!).

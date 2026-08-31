@@ -21,9 +21,13 @@ flowchart LR
 **Commander — единственный с правом отправлять команды FC.**
 
 Multi-consumer: кадры — в SHM-кольце (`shmem-buffer`, D-013) zero-copy;
-**события и лёгкие данные (детекции/телеметрия/команды/статусы) — через
-шину Zenoh** (`event-bus`, D-014): детектор уже публикует `at/detections`.
-План перевода остальных компонентов — docs/BUS_MIGRATION_PLAN.md.
+**все события и лёгкие данные — через шину Zenoh** (`event-bus`, D-014).
+МИГРАЦИЯ ЗАВЕРШЕНА (M0–M5): детектор→at/detections, трекер→at/tracks,
+fc-bridge↔at/telemetry|at/commands|at/fc_events, commander — замкнутая
+петля, консоль bus-mon/repl-bus/config-svc. Кадры в rknn-bridge — тоже
+мимо провода: именованный SHM-сегмент (D-016, детектор 27 FPS).
+Развёртывание — 8 systemd-сервисов (deploy/systemd/autotarget-*),
+soak 30 мин без падений (§22).
 
 ## Крейты (10 + C++)
 

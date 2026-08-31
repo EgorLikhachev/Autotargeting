@@ -44,7 +44,7 @@
 
 ## Версия контекста
 
-**Дата генерации:** 2026-08-14
-**Ветка:** `main` @ `33028e6`
+**Дата генерации:** 2026-08-31
+**Ветка:** `main` @ `c7f79e0+` (main-only; feature-ветки слиты и удалены)
 **Phase:** 1.1 закрыта (minimal CV loop работает end-to-end на NPU, validated на железе).
 Репозиторий оформлен по OSS-конвенциям (README/LICENSE/CONTRIBUTING/CHANGELOG на git-root).

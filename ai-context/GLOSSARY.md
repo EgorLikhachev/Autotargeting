@@ -28,5 +28,11 @@
 | **Zero-copy API** | `rknn_create_mem` + `rknn_set_io_mem` — NPU пишет прямо в наш буфер, без копий. |
 | **SDD** | Spec-Driven Development — разработка через спецификацию (`docs/SDD-SPEC.md`). |
 | **COCO** | Common Objects in Context — датасет 80 классов (person, car, bus...). Базовая модель обучена на нём. |
+| **SHM frame path (D-016)** | кадры детектор→rknn-bridge через именованный /dev/shm-сегмент (2×max(w,h)²×3), не base64. |
+| **Letterbox-контракт** | детектор шлёт letterboxed INPUT_SIZE² RGB24; init-dims — только для unprojection; C++ копирует по размерам тензора. |
+| **at/* темы** | топики шины: detections, tracks, telemetry, commands, fc_events, config(_get/_ack), status/{компонент}. |
+| **CommandMsg / TrackMsg / FcEvent** | контракты шины (M0); команды — CongestionControl::Block. |
+| **bus anchor** | единственный zenoh-listener (config-svc); остальные компоненты connect. |
+| **Soak** | длительный прогон всей композиции (30 мин, §22): живучесть/память/температура. |
 | **V4l2DirectSource** | capture-backend через прямой `libc` ioctl (feature `v4l2-direct`), в обход `v4l` crate. 32 FPS vs 21 FPS. |
 | **Drop-old / drop-new** | capture policy: при переполненном канале дропается кадр, capture не блокируется (D-010). `try_send` вместо `blocking_send`. |
