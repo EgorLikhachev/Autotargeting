@@ -9,9 +9,30 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Конфигурация шины событий (D-014, M5).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BusConfig {
+    /// Endpoint zenoh (listener или connect — решает компонент).
+    pub endpoint: String,
+    /// Поднять listener (первый процесс шины) вместо connect.
+    #[serde(default)]
+    pub listen: bool,
+}
+
+impl Default for BusConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: "tcp/127.0.0.1:7447".to_string(),
+            listen: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub video: VideoConfig,
+    /// M5: шина событий (zenoh).
+    pub bus: BusConfig,
     pub inference: InferenceConfig,
     pub tracker: TrackerConfig,
     pub fc: FcConfig,
@@ -191,6 +212,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             video: VideoConfig::default(),
+            bus: BusConfig::default(),
             inference: InferenceConfig::default(),
             tracker: TrackerConfig::default(),
             fc: FcConfig::default(),

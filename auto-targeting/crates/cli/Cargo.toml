@@ -17,6 +17,7 @@ path = "src/lib.rs"
 [dependencies]
 common = { workspace = true }
 fc-adapter = { workspace = true }
+event-bus = { workspace = true }
 commander = { workspace = true }
 target-tracker = { workspace = true }
 cv-inference = { workspace = true }
@@ -34,12 +35,17 @@ chrono = { workspace = true }
 parking_lot = { workspace = true }
 rustyline = "14.0"
 
+[dependencies.futures]
+version = "0.3"
+
 [dev-dependencies]
+fc-bridge = { workspace = true }
 tokio-test = { workspace = true }
 chrono = { workspace = true }
 target-tracker = { workspace = true }
 video-capture = { workspace = true }
 common = { workspace = true }
 fc-adapter = { workspace = true }
+event-bus = { workspace = true }
 commander = { workspace = true }
 proptest = { workspace = true }
