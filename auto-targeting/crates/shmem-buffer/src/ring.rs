@@ -832,17 +832,29 @@ pub fn recover_stale_slots(consumer: &FrameConsumer, max_age_ns: u64) -> usize {
                     .ref_count
                     .compare_exchange(WRITER_LOCK, 0, Ordering::AcqRel, Ordering::Relaxed)
                     .is_ok()
-        } else if cur > 0 {
+        } else if cur == 1 {
+            // A5 аудита: восстанавливаем ТОЛЬКО одиночные слоты. holder_pid
+            // хранит последнего взявшего — при cur>1 нельзя отличить долю
+            // мёртвого от живого: CAS(cur->0) стирал бы живого читателя
+            // (torn read + слот навечно в WRITER_LOCK после его Drop).
             let pid = slot.holder_pid.load(Ordering::Relaxed);
             let stale = now.saturating_sub(slot.ts_ns) > max_age_ns;
             let dead = pid != 0 && pid != std::process::id() && !pid_alive(pid);
-            // Двойная проверка: pid мог обновиться живым читателем.
-            let pid_now = slot.holder_pid.load(Ordering::Relaxed);
-            dead && stale && pid_now == pid
+            dead
+                && stale
                 && slot
                     .ref_count
-                    .compare_exchange(cur, 0, Ordering::AcqRel, Ordering::Relaxed)
+                    .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Relaxed)
                     .is_ok()
+        } else if cur > 1 {
+            // Шареный слот: только лог — безопасная ручная интерценция
+            // (вычитание доли мёртвого) требует per-holder учёта.
+            tracing::warn!(
+                slot = idx,
+                ref_count = cur,
+                "stale shared slot: skip reaper (manual intervention)"
+            );
+            false
         } else {
             false
         };

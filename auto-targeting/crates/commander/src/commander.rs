@@ -155,6 +155,13 @@ impl Commander {
     }
 
     /// Get a handle to the watchdog registry (for background feeding).
+    /// A1 аудита: камера из реальной геометрии (default 1280x720 несовместим
+    /// с фактическими кадрами). FOV влияет на yaw-команду transform.
+    pub fn with_camera_params(mut self, camera: crate::transform::CameraParams) -> Self {
+        self.camera = crate::transform::CameraToAngular::new(camera);
+        self
+    }
+
     pub fn watchdog_registry(&self) -> Arc<WatchdogRegistry> {
         Arc::clone(&self.watchdogs)
     }
@@ -184,7 +191,7 @@ impl Commander {
         self.watchdogs.register(
             WatchdogId::FcHeartbeat,
             WatchdogConfig::new(
-                Duration::from_millis(1000), // default; will be overridden in real config
+                Duration::from_millis(self.config.fc_heartbeat_wdt_ms.max(1000)),
                 WatchdogAction::Abort,
             ),
         );
@@ -460,12 +467,11 @@ impl Commander {
         // угловая коррекция удержания цели (типично для gimbal/yaw-only
         // сопровождения fixed-wing).
         let att = self.fc.attitude();
-        // offset_x/y в CorrectionCommand — ПИКСЕЛИ от центра кадра;
-        // FrameOffset ожидает нормализованные [-1,1] (±половина кадра).
-        let cam = self.camera.camera();
+        // A1: offset приходит УЖЕ нормализованным [-1,1] с границы шины
+        // (bus_runner); здесь — только clamp от деградаций.
         let norm = crate::transform::FrameOffset {
-            x: (cmd.offset_x / (cam.width as f32 / 2.0)).clamp(-1.0, 1.0),
-            y: (cmd.offset_y / (cam.height as f32 / 2.0)).clamp(-1.0, 1.0),
+            x: cmd.offset_x.clamp(-1.0, 1.0),
+            y: cmd.offset_y.clamp(-1.0, 1.0),
         };
         let ned = self.camera.offset_to_ned_target_with_attitude(norm, att.pitch, att.yaw);
         let target = common::PositionTargetNED {

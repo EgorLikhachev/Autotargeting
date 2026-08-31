@@ -14,12 +14,12 @@ struct Args {
     endpoint: String,
     #[arg(long, default_value = "tcp/127.0.0.1:7447")]
     bus: String,
-    /// Центр кадра X (пиксели).
-    #[arg(long, default_value_t = 320.0)]
-    center_x: f32,
-    /// Центр кадра Y.
-    #[arg(long, default_value_t = 240.0)]
-    center_y: f32,
+    /// Ширина кадра (пиксели) — для нормализации offset.
+    #[arg(long, default_value_t = 640)]
+    width: u32,
+    /// Высота кадра.
+    #[arg(long, default_value_t = 480)]
+    height: u32,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -49,12 +49,12 @@ async fn main() {
         }
     };
     let cfg = commander::bus_runner::CommanderBusConfig {
-        frame_center: (args.center_x, args.center_y),
+        frame_size: (args.width, args.height),
         ..Default::default()
     };
     println!(
-        "=== commander-bus === fc={} bus={} center=({},{})",
-        args.fc, args.bus, args.center_x, args.center_y
+        "=== commander-bus === fc={} bus={} frame=({},{})",
+        args.fc, args.bus, args.width, args.height
     );
     if let Err(e) = commander::bus_runner::CommanderBus::new(cfg)
         .run(&mut commander, &bus)

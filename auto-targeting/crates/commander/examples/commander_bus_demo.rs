@@ -21,12 +21,12 @@ struct Args {
     /// Прекратить после N секунд (0 — бессрочно).
     #[arg(long, default_value_t = 0)]
     seconds: u64,
-    /// Центр кадра X (пиксели).
-    #[arg(long, default_value_t = 320.0)]
-    center_x: f32,
-    /// Центр кадра Y.
-    #[arg(long, default_value_t = 240.0)]
-    center_y: f32,
+    /// Ширина кадра (пиксели) — для нормализации offset.
+    #[arg(long, default_value_t = 640)]
+    width: u32,
+    /// Высота кадра.
+    #[arg(long, default_value_t = 480)]
+    height: u32,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -56,14 +56,14 @@ async fn main() {
         }
     };
     let cfg = commander::bus_runner::CommanderBusConfig {
-        frame_center: (args.center_x, args.center_y),
+        frame_size: (args.width, args.height),
         max_duration: (args.seconds > 0).then(|| std::time::Duration::from_secs(args.seconds)),
         ..Default::default()
     };
 
     println!(
-        "=== commander_bus_demo === fc={} endpoint={} bus={} center=({},{})",
-        args.fc, args.endpoint, args.bus, args.center_x, args.center_y
+        "=== commander_bus_demo === fc={} endpoint={} bus={} frame=({},{})",
+        args.fc, args.endpoint, args.bus, args.width, args.height
     );
     match commander::bus_runner::CommanderBus::new(cfg)
         .run(&mut commander, &bus)

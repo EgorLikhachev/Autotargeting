@@ -386,6 +386,22 @@ impl<T: Serialize> TypedPublisher<T> {
         let payload = serde_json::to_vec(value)?;
         self.inner.put(payload).await.map_err(zerr)
     }
+
+    /// Publish с таймаутом. A3 аудита: для Block-QoS (команды) отсутствие
+    /// таймаута может повесить publisher навсегда при мёртвом peer.
+    pub async fn publish_timeout(
+        &self,
+        value: &T,
+        timeout: std::time::Duration,
+    ) -> Result<(), BusError> {
+        match tokio::time::timeout(timeout, self.publish(value)).await {
+            Ok(r) => r,
+            Err(_) => Err(BusError::Zenoh(format!(
+                "publish timeout after {:?} (Block QoS / dead peer?)",
+                timeout
+            ))),
+        }
+    }
 }
 
 /// Подписчик типизированных сообщений (FIFO-канал).

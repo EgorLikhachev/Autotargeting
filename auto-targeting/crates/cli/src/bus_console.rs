@@ -84,7 +84,11 @@ pub async fn send_fc_command(
         source: "cli".into(),
         id,
     };
-    bus.publish_commands().await?.publish(&msg).await
+    // A3: Block-QoS + мёртвый peer не должны вешать оператора.
+    bus.publish_commands()
+        .await?
+        .publish_timeout(&msg, std::time::Duration::from_secs(2))
+        .await
 }
 
 /// REPL на шине. Блокирующий stdin — в spawn_blocking, команды — из async.
