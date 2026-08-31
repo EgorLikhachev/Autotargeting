@@ -236,8 +236,10 @@ struct FrameShm {
     buffers: u32,
 }
 
-// FrameShm: сырой mmap-указатель; доступ строго из владеющего клиента.
+// FrameShm: сырой mmap-указатель; доступ строго из владеющего клиента
+// (infer — &mut self; указатель не расшаривается между потоками).
 unsafe impl Send for FrameShm {}
+unsafe impl Sync for FrameShm {}
 
 impl FrameShm {
     fn create(path: &str, frame_size: usize, buffers: u32) -> Result<Self, String> {
