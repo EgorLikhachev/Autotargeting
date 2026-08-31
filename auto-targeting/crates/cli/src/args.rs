@@ -51,6 +51,21 @@ pub enum Command {
         #[command(flatten)]
         scenario_args: ScenarioArgs,
     },
+    /// M5: монитор шины (подписка at/**, pretty-print).
+    BusMon {
+        /// Маска тем zenoh.
+        #[arg(long, default_value = "at/**")]
+        topics: String,
+        /// Свернуть payload до N символов.
+        #[arg(long, default_value_t = 400)]
+        max_len: usize,
+    },
+    /// M5: операторский REPL через шину.
+    ReplBus,
+    /// M5: конфиг-сервис — отвечать на запросы at/config.
+    ConfigSvc,
+    /// M5: получить конфиг (at/config) и напечатать.
+    ConfigGet,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -72,10 +87,25 @@ pub enum RunMode {
     HealthCheck,
     Repl,
     Scenario,
+    /// M5: монитор шины at/**.
+    BusMon,
+    /// M5: REPL через шину (команды FC + живые данные).
+    ReplBus,
+    /// M5: конфиг-сервис (queryable at/config).
+    ConfigSvc,
+    /// M5: запрос конфига (get at/config).
+    ConfigGet,
 }
 
 impl CliArgs {
     pub fn mode(&self) -> RunMode {
+        match &self.command {
+            Some(Command::BusMon { .. }) => return RunMode::BusMon,
+            Some(Command::ReplBus) => return RunMode::ReplBus,
+            Some(Command::ConfigSvc) => return RunMode::ConfigSvc,
+            Some(Command::ConfigGet) => return RunMode::ConfigGet,
+            _ => {}
+        }
         if self.command.is_some() {
             RunMode::Scenario
         } else if self.repl {

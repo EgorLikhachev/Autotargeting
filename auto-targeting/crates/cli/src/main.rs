@@ -9,6 +9,7 @@
 
 use anyhow::Result;
 use auto_targeting_cli::args::{CliArgs, Command, RunMode};
+use auto_targeting_cli::bus_console;
 use auto_targeting_cli::operator::OperatorCommand;
 use auto_targeting_cli::repl;
 use auto_targeting_cli::scenario_runner;
@@ -40,6 +41,28 @@ async fn main() -> Result<()> {
 
     // Run according to mode
     match args.mode() {
+        RunMode::BusMon => {
+            let Command::BusMon { topics, max_len } =
+                args.command.expect("bus-mon subcommand")
+            else {
+                unreachable!()
+            };
+            // Первый процесс на хосте поднимает listener шины.
+            let bus = bus_console::connect_bus(&config, true).await?;
+            bus_console::run_monitor(&bus, &topics, max_len).await
+        }
+        RunMode::ReplBus => {
+            let bus = bus_console::connect_bus(&config, true).await?;
+            bus_console::run_repl(&bus).await
+        }
+        RunMode::ConfigSvc => {
+            let bus = bus_console::connect_bus(&config, true).await?;
+            bus_console::run_config_service(&bus, config).await
+        }
+        RunMode::ConfigGet => {
+            let bus = bus_console::connect_bus(&config, false).await?;
+            bus_console::config_get(&bus).await
+        }
         RunMode::Full => run_full(config).await,
         RunMode::MockFc => run_mock_fc(config).await,
         RunMode::MockAll => run_mock_all(config).await,
@@ -321,6 +344,7 @@ async fn run_scenario_command(args: CliArgs) -> Result<()> {
         .expect("command should be set in scenario mode");
     let scenario_args = match command {
         Command::Scenario { scenario_args } => scenario_args,
+        _ => unreachable!("bus modes dispatched earlier"),
     };
 
     match (scenario_args.file, scenario_args.all) {

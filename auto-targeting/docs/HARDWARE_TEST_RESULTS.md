@@ -775,3 +775,22 @@ ArduPlane SITL: fc-bridge (40 с) + commander (30 с) + track_gen (22 с) —
 | **Телеметрия в окне командира** | **245** (было 0 — followup закрыт) |
 | Коррекций послано / подавлено | 136 / 67 |
 | Тесты commander | 115 unit + 3 bus зелёные, clippy 0 |
+
+---
+
+## 21. M5: операторская консоль на шине (2026-08-31)
+
+Ветка `feature/bus-m5-cli`. Новый модуль `cli::bus_console` + подкоманды:
+`bus-mon` (монитор at/** с фильтром/усечением), `repl-bus` (команды FC
+через at/commands + живые tracks/telemetry/statuses; stdin через
+spawn_blocking-канал), `config-svc`/`config-get` (конфиг-сервис).
+Секция `[bus]` в AppConfig (`AT_BUS__ENDPOINT`).
+
+Конфиг-протокол — **pub/sub-ack** (at/config_get → at/config_ack), не
+zenoh-query: query в peer-топологии со scouting-off не доставлял ответы
+(пустой reply при живом queryable); pub/sub-ack проверен всем контуром.
+
+Приёмка: REPL-команды доходят до fc-bridge (arm + set_mode → счётчик ≥2);
+config roundtrip (маркер fps=42, endpoint) — 2/2 теста (все ОС); 20 lib
+тестов; clippy 0. Критерий M5 «оператор видит и управляет через шину» —
+выполнен.
