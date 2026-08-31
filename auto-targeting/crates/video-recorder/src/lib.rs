@@ -222,6 +222,16 @@ impl FfmpegRawWriter {
         }
         Ok(())
     }
+
+    /// B2 аудита: при ошибке записи (ffmpeg умер) — закрыть stdin и убить/
+    /// дождаться ребёнка, чтобы не плодить зомби и не оставлять открытые
+    /// дескрипторы. Выходной файл остаётся без moov (нечитаем) — это
+    /// фиксируется вызывающим логом.
+    pub fn abort(mut self) {
+        drop(self.child.stdin.take());
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 
 // ===================== recorder =====================
@@ -364,11 +374,19 @@ impl Recorder {
                     ];
                     let line_refs: Vec<&str> = lines.iter().map(String::as_str).collect();
                     cv_visualizer::draw_osd(&mut img, &line_refs, font);
-                    self.write_rgb(&mut writer, img.into_raw(), &mut stats)?;
+                    if let Err(e) = Self::write_rgb(&mut writer, img.into_raw(), &mut stats) {
+                        tracing::error!("ffmpeg write failed — aborting encoder (output not finalized): {e}");
+                        writer.abort();
+                        return Err(e);
+                    }
                     continue;
                 }
             }
-            self.write_rgb(&mut writer, rgb, &mut stats)?;
+            if let Err(e) = Self::write_rgb(&mut writer, rgb, &mut stats) {
+                tracing::error!("ffmpeg write failed — aborting encoder (output not finalized): {e}");
+                writer.abort();
+                return Err(e);
+            }
 
             // M1: статус раз в секунду.
             if last_status.elapsed() >= Duration::from_secs(1) {
@@ -402,16 +420,12 @@ impl Recorder {
     }
 
     fn write_rgb(
-        &self,
         writer: &mut FfmpegRawWriter,
         rgb: Vec<u8>,
         stats: &mut RecorderStats,
     ) -> Result<(), RecorderError> {
         writer.write_frame(&rgb)?;
         stats.frames_written += 1;
-        if self.font.is_some() && self.cfg.osd {
-            stats.osd_frames += 1;
-        }
         Ok(())
     }
 
@@ -474,6 +488,24 @@ pub use ab_glyph;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// B2: abort() не паникует и завершает ребёнка (kill+wait).
+    /// Полный зомби-тест (pgrep) — Unix CI; здесь контракт-смоук.
+    #[test]
+    #[cfg(unix)]
+    fn abort_kills_encoder() {
+        let dir = std::env::temp_dir().join(format!("vr-abort-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("x.mp4");
+        let mut w = FfmpegRawWriter::spawn(out.to_str().unwrap(), 64, 48, 30)
+            .expect("ffmpeg present");
+        // Небольшой кадр, затем немедленный abort.
+        w.write_frame(&vec![0u8; 64 * 48 * 3]).unwrap();
+        w.abort(); // не должен паниковать/виснуть
+        // Повторный abort-контракт: drop тоже безопасен.
+        drop(w);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn fps_zero_rejected() {
