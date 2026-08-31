@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting Video recorder (SHM ring -> MP4 + OSD)
+After=autotarget-camera.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/bin/sh -c 'exec $HOME_DIR/target/release/video-recorder --name $SEGMENT --out /home/orangepi/soak_rec.mp4 --fps $CAM_FPS --quiet-timeout 60 --osd --font /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf --bus $BUS'
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

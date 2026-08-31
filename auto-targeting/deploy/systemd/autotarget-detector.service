@@ -1,0 +1,17 @@
+[Unit]
+Description=Auto-Targeting Detector (SHM ring -> NPU -> at/detections)
+After=autotarget-rknn-bridge.service autotarget-camera.service
+Requires=autotarget-rknn-bridge.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/bin/sh -c 'exec $HOME_DIR/target/release/detector --segment $SEGMENT --backend bridge --model $MODEL --frame-shm /dev/shm/at-infer --bus $BUS'
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

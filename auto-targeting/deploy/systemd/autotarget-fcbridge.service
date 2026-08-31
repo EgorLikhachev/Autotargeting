@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting FC bridge (mock; MAVLink <-> bus)
+After=autotarget-bus.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/bin/sh -c 'exec $HOME_DIR/target/release/fc-bridge --adapter mock --bus $BUS --hz 10'
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

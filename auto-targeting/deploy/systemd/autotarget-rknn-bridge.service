@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting RKNN bridge (C++ NPU)
+After=network.target autotarget-bus.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/home/orangepi/auto-targeting/auto-targeting/rknn-bridge/build/rknn-bridge
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

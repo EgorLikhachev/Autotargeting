@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting Bus anchor + config service (zenoh listener)
+After=network.target
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/home/orangepi/auto-targeting/auto-targeting/target/release/auto-targeting config-svc
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

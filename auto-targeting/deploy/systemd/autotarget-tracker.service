@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting Tracker (at/detections -> at/tracks)
+After=autotarget-bus.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/bin/sh -c 'exec $HOME_DIR/target/release/tracker --bus $BUS'
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target

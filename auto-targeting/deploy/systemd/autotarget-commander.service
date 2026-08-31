@@ -1,0 +1,16 @@
+[Unit]
+Description=Auto-Targeting Commander (tracks+telemetry -> corrections)
+After=autotarget-tracker.service autotarget-fcbridge.service
+[Service]
+Type=simple
+User=orangepi
+Group=orangepi
+EnvironmentFile=/etc/auto-targeting/autotarget.env
+WorkingDirectory=/home/orangepi/auto-targeting/auto-targeting
+ExecStart=/bin/sh -c 'exec $HOME_DIR/target/release/commander-bus --fc mock --bus $BUS'
+Restart=always
+RestartSec=2
+RUST_LOG=info
+
+[Install]
+WantedBy=multi-user.target
