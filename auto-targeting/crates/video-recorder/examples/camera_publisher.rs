@@ -125,8 +125,12 @@ fn main() {
         };
         println!("[+] capture streaming");
 
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(args.seconds);
+        // 0 = бессрочно (сервисный режим; детектор трактует так же).
+        let deadline = if args.seconds == 0 {
+            std::time::Instant::now() + std::time::Duration::from_secs(86_400 * 365)
+        } else {
+            std::time::Instant::now() + std::time::Duration::from_secs(args.seconds)
+        };
         let mut convert_errors: u64 = 0;
         let mut window_frames: u64 = 0;
         let mut window_start = std::time::Instant::now();
