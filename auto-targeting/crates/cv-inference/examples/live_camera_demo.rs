@@ -14,14 +14,10 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 use clap::Parser;
-use common::{Frame, FrameMetadata, PixelFormat};
 use cv_visualizer::FrameWriter;
-use jpeg_decoder;
 use parking_lot::Mutex;
-use system_telemetry::TelemetrySample;
 
 /// Live camera demo with NPU inference.
 #[derive(Parser)]
