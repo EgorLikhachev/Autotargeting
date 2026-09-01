@@ -324,7 +324,7 @@ impl RknnBridgeClient {
     }
 
     /// Подключиться к Unix socket.
-    fn connect_socket(&self) -> InferenceResult<UnixStream> {
+    async fn connect_socket(&self) -> InferenceResult<UnixStream> {
         let deadline = Instant::now() + Duration::from_millis(self.config.connect_timeout_ms);
         let mut last_err = None;
 
@@ -350,7 +350,9 @@ impl RknnBridgeClient {
                 }
                 Err(e) => {
                     last_err = Some(e);
-                    std::thread::sleep(Duration::from_millis(100));
+                    // C4 аудита: ретрай-пауза через tokio — thread::sleep
+                    // блокировал reactor на весь connect-таймаут.
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
@@ -459,7 +461,7 @@ impl InferenceBackend for RknnBridgeClient {
         );
 
         // Подключиться к socket
-        let stream = self.connect_socket()?;
+        let stream = self.connect_socket().await?;
         self.stream = Some(stream);
 
         // M6: при первом init создаём SHM-сегмент кадров (если запрошен).
