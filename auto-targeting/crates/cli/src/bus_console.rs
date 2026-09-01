@@ -95,7 +95,10 @@ pub async fn send_fc_command(
 pub async fn run_repl(bus: &EventBus) -> anyhow::Result<()> {
     // Подписки -> кэш (фоновая задача).
     let cache = Arc::new(Mutex::new(BusCache::default()));
-    let track_sub = bus.subscribe_tracks().await.map_err(|e| anyhow::anyhow!(e))?;
+    let track_sub = bus
+        .subscribe_tracks()
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
     let tele_sub = bus
         .subscribe_telemetry()
         .await
@@ -273,7 +276,10 @@ pub async fn run_config_service(bus: &EventBus, cfg: AppConfig) -> anyhow::Resul
         .publisher::<serde_json::Value>(topics::CONFIG_ACK)
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
-    eprintln!("[config-svc] answering on {CONFIG_GET_TOPIC} -> {}", topics::CONFIG_ACK);
+    eprintln!(
+        "[config-svc] answering on {CONFIG_GET_TOPIC} -> {}",
+        topics::CONFIG_ACK
+    );
     let payload = serde_json::to_value(&cfg)?;
     while req.recv().await.is_ok() {
         let _ = ack.publish(&payload).await;

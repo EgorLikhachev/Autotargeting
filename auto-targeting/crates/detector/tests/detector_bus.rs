@@ -86,7 +86,10 @@ async fn detector_publishes_detections_from_ring_to_bus() {
     }
 
     // 5. Статус-топик: метрики контура.
-    let status = status_sub.recv_timeout(Duration::from_secs(5)).await.unwrap();
+    let status = status_sub
+        .recv_timeout(Duration::from_secs(5))
+        .await
+        .unwrap();
     assert!(status.frames_processed >= 1);
     assert_eq!(status.frame_w, W);
     assert_eq!(status.frame_h, H);

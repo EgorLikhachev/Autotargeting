@@ -20,26 +20,26 @@ pub mod replay;
 pub mod synthetic;
 pub mod traits;
 
-#[cfg(not(feature = "v4l2"))]
-pub mod v4l2_stub;
 #[cfg(feature = "v4l2")]
 pub mod v4l2_real;
+#[cfg(not(feature = "v4l2"))]
+pub mod v4l2_stub;
 
 #[cfg(feature = "v4l2-direct")]
 pub mod v4l2_direct;
 
 pub use convert::{
-    convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, rgb24_to_nv12, nv12_to_rgb24, yuyv_to_nv12,
-    yuyv_to_rgb24, ConversionError, ConversionResult,
+    convert_to, decode_mjpeg_to_nv12, decode_mjpeg_to_rgb, nv12_to_rgb24, rgb24_to_nv12,
+    yuyv_to_nv12, yuyv_to_rgb24, ConversionError, ConversionResult,
 };
 pub use replay::ReplaySource;
 pub use synthetic::{SyntheticConfig, SyntheticPattern, SyntheticVideoSource};
 pub use traits::{VideoCaptureError, VideoSource};
 
-#[cfg(not(feature = "v4l2"))]
-pub use v4l2_stub::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
 #[cfg(feature = "v4l2")]
 pub use v4l2_real::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
+#[cfg(not(feature = "v4l2"))]
+pub use v4l2_stub::{device_exists, list_v4l2_devices, query_formats, DeviceProbe, V4l2Source};
 
 #[cfg(all(feature = "v4l2-direct", target_os = "linux"))]
 pub use v4l2_direct::V4l2DirectSource;

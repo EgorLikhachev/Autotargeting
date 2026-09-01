@@ -91,10 +91,8 @@ impl V4l2Source {
         let v4l_fourcc = pixel_format_to_fourcc(self.format);
         let format_supported = formats.iter().any(|f| f.fourcc == v4l_fourcc);
 
-        let supported_formats: Vec<String> = formats
-            .iter()
-            .map(|f| fourcc_to_string(f.fourcc))
-            .collect();
+        let supported_formats: Vec<String> =
+            formats.iter().map(|f| fourcc_to_string(f.fourcc)).collect();
 
         if !format_supported {
             return Err(VideoCaptureError::DeviceConfig(format!(

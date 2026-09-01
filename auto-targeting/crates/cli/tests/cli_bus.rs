@@ -70,9 +70,7 @@ async fn config_service_answers_query() {
     // Сервис (в фоновой задаче).
     let svc_bus = EventBus::connect("tcp/127.0.0.1:17462").await.unwrap();
     let svc_cfg = cfg.clone();
-    let svc = tokio::spawn(async move {
-        bus_console::run_config_service(&svc_bus, svc_cfg).await
-    });
+    let svc = tokio::spawn(async move { bus_console::run_config_service(&svc_bus, svc_cfg).await });
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // Клиент: запрос через pub/sub-ack.

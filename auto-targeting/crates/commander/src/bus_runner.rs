@@ -119,7 +119,9 @@ impl CommanderBus {
             if let Ok(t) = tele.recv_timeout(Duration::from_millis(0)).await {
                 stats.telemetry_received += 1;
                 // heartbeat жив, если телеметрия свежая — кормим watchdog.
-                commander.watchdog_registry().feed(crate::watchdogs::WatchdogId::FcHeartbeat);
+                commander
+                    .watchdog_registry()
+                    .feed(crate::watchdogs::WatchdogId::FcHeartbeat);
                 let _ = t; // поле t_ms — метка источника
             }
 
@@ -146,9 +148,10 @@ impl CommanderBus {
                     // семантика select_target; переключение — отдельная
                     // команда оператора через at/commands в M5).
                     if commander.health_snapshot().active_target_id.is_none()
-                        && commander.select_target(track.track_id).is_err() {
-                            tracing::debug!(track.track_id, "select_target rejected (state)");
-                        }
+                        && commander.select_target(track.track_id).is_err()
+                    {
+                        tracing::debug!(track.track_id, "select_target rejected (state)");
+                    }
                 }
 
                 // Управление только по свежему треку.
@@ -228,6 +231,9 @@ impl CommanderBus {
 
     fn bbox_center(&self, t: &TrackMsg) -> (f32, f32) {
         let b = &t.bbox;
-        (b.x as f32 + b.width as f32 / 2.0, b.y as f32 + b.height as f32 / 2.0)
+        (
+            b.x as f32 + b.width as f32 / 2.0,
+            b.y as f32 + b.height as f32 / 2.0,
+        )
     }
 }

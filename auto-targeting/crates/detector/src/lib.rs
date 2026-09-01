@@ -48,8 +48,6 @@ pub enum DetectorError {
     NoFrames,
 }
 
-
-
 /// Выбор инференс-бэкенда.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BackendKind {
@@ -321,8 +319,8 @@ impl Detector {
             (v.width, v.height, v.storage_format(), v.frame_id)
         };
         drop(first);
-        let format = format
-            .ok_or_else(|| DetectorError::InvalidConfig("unsupported ring format".into()))?;
+        let format =
+            format.ok_or_else(|| DetectorError::InvalidConfig("unsupported ring format".into()))?;
         tracing::info!(w, h, ?format, backend = ?self.cfg.backend, "detector attached");
 
         let mut backend = build_backend(&self.cfg, w, h, &self.cfg.frame_shm_path)?;
@@ -330,7 +328,9 @@ impl Detector {
         tracing::info!(backend = backend.name(), "inference backend ready");
 
         let det_pub = bus.publish_detections().await?;
-        let status_pub = bus.publisher::<DetectorStatus>(&topics::status("detector")).await?;
+        let status_pub = bus
+            .publisher::<DetectorStatus>(&topics::status("detector"))
+            .await?;
 
         let mut stats = DetectorStats::default();
         let mut metrics = Metrics::new();
@@ -387,7 +387,10 @@ impl Detector {
                 (v.frame_id, v.ts_ns, guard.to_vec(), v.to_metadata())
             };
             drop(guard);
-            let raw = common::Frame { data: raw_copy, metadata: raw_meta };
+            let raw = common::Frame {
+                data: raw_copy,
+                metadata: raw_meta,
+            };
             let prepared = preprocess_frame(&raw, format, self.cfg.backend)?;
 
             let t_infer = Instant::now();

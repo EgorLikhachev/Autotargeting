@@ -65,7 +65,10 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&args.output)?;
 
     println!("=== LIVE CAMERA DEMO ===");
-    println!("Device: {} {}x{} @ {}fps, {}s", args.device, args.width, args.height, args.fps, args.seconds);
+    println!(
+        "Device: {} {}x{} @ {}fps, {}s",
+        args.device, args.width, args.height, args.fps, args.seconds
+    );
 
     // Check rknn-bridge is running.
     let bridge_sock = std::path::Path::new("/tmp/rknn-bridge.sock");
@@ -124,8 +127,8 @@ fn run_live_demo(
     writer: Arc<Mutex<FrameWriter>>,
     telemetry_path: PathBuf,
 ) -> anyhow::Result<()> {
-    use std::os::unix::net::UnixStream;
     use std::io::{Read, Write};
+    use std::os::unix::net::UnixStream;
 
     // Build V4L2 capture source.
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::channel::<Frame>(4);
@@ -198,13 +201,19 @@ fn run_live_demo(
     let mut resp_buf = vec![0u8; resp_len];
     sock.read_exact(&mut resp_buf)?;
     let resp_str = String::from_utf8_lossy(&resp_buf);
-    println!("[+] init response: {}", &resp_str[..resp_str.len().min(200)]);
+    println!(
+        "[+] init response: {}",
+        &resp_str[..resp_str.len().min(200)]
+    );
     if !resp_str.contains(r#""ok":true"#) {
         anyhow::bail!("init failed");
     }
 
     // MAIN LOOP
-    println!("[+] Starting capture+inference loop for {}s...", args.seconds);
+    println!(
+        "[+] Starting capture+inference loop for {}s...",
+        args.seconds
+    );
     let deadline = Instant::now() + Duration::from_secs(args.seconds);
     let start = Instant::now();
     let mut total_frames = 0u64;
@@ -226,13 +235,19 @@ fn run_live_demo(
         let rgb_frame = match frame.metadata.format {
             PixelFormat::Yuyv => match video_capture::convert::yuyv_to_rgb24(&frame) {
                 Ok(f) => f,
-                Err(e) => { eprintln!("yuyv convert err: {e}"); continue; }
+                Err(e) => {
+                    eprintln!("yuyv convert err: {e}");
+                    continue;
+                }
             },
             PixelFormat::Mjpeg => {
                 let mut decoder = jpeg_decoder::Decoder::new(&frame.data[..]);
                 let pixels = match decoder.decode() {
                     Ok(p) => p,
-                    Err(e) => { eprintln!("decode err: {e}"); continue; }
+                    Err(e) => {
+                        eprintln!("decode err: {e}");
+                        continue;
+                    }
                 };
                 let info = decoder.info().unwrap();
                 Frame {
@@ -246,7 +261,10 @@ fn run_live_demo(
                     },
                 }
             }
-            other => { eprintln!("unsupported capture format: {other:?}"); continue; }
+            other => {
+                eprintln!("unsupported capture format: {other:?}");
+                continue;
+            }
         };
 
         // Resize to 640x640 for NPU (simple stretch for demo)
@@ -255,13 +273,19 @@ fn run_live_demo(
         let (rw, rh) = (rgb_frame.metadata.width, rgb_frame.metadata.height);
         let send_frame = if rw != 640 || rh != 640 {
             // Quick resize via image crate
-            let img = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(rw, rh, rgb_frame.data.clone())
-                .unwrap();
-            let resized = image::imageops::resize(&img, 640, 640, image::imageops::FilterType::Nearest);
+            let img = image::ImageBuffer::<image::Rgb<u8>, Vec<u8>>::from_raw(
+                rw,
+                rh,
+                rgb_frame.data.clone(),
+            )
+            .unwrap();
+            let resized =
+                image::imageops::resize(&img, 640, 640, image::imageops::FilterType::Nearest);
             Frame {
                 data: resized.into_raw(),
                 metadata: FrameMetadata {
-                    width: 640, height: 640,
+                    width: 640,
+                    height: 640,
                     format: PixelFormat::Rgb24,
                     captured_at: rgb_frame.metadata.captured_at,
                     seq: rgb_frame.metadata.seq,
@@ -282,17 +306,28 @@ fn run_live_demo(
             frame_b64
         );
         let infer_bytes = infer_msg.as_bytes();
-        if sock.write_all(&(infer_bytes.len() as u32).to_be_bytes()).is_err() {
+        if sock
+            .write_all(&(infer_bytes.len() as u32).to_be_bytes())
+            .is_err()
+        {
             break;
         }
-        if sock.write_all(infer_bytes).is_err() { break; }
+        if sock.write_all(infer_bytes).is_err() {
+            break;
+        }
 
         // Read response
-        if sock.read_exact(&mut len_buf).is_err() { break; }
+        if sock.read_exact(&mut len_buf).is_err() {
+            break;
+        }
         let resp_len = u32::from_be_bytes(len_buf) as usize;
-        if resp_len > 10_000_000 { break; } // sanity
+        if resp_len > 10_000_000 {
+            break;
+        } // sanity
         let mut resp_buf = vec![0u8; resp_len];
-        if sock.read_exact(&mut resp_buf).is_err() { break; }
+        if sock.read_exact(&mut resp_buf).is_err() {
+            break;
+        }
         let infer_resp = String::from_utf8_lossy(&resp_buf);
 
         let infer_ms = t_infer_start.elapsed().as_millis() as u64;
@@ -328,7 +363,8 @@ fn run_live_demo(
             let line = serde_json::to_string(&sample)?;
             use std::io::Write;
             let mut f = std::fs::OpenOptions::new()
-                .create(true).append(true)
+                .create(true)
+                .append(true)
                 .open(&telemetry_path)?;
             writeln!(f, "{line}")?;
             last_telemetry = Instant::now();
@@ -344,7 +380,9 @@ fn run_live_demo(
     let elapsed = start.elapsed().as_secs_f64();
     let avg_latency = if !latencies.is_empty() {
         latencies.iter().sum::<u64>() as f64 / latencies.len() as f64
-    } else { 0.0 };
+    } else {
+        0.0
+    };
     let max_latency = latencies.iter().max().copied().unwrap_or(0);
     let min_latency = latencies.iter().min().copied().unwrap_or(0);
 
@@ -353,7 +391,10 @@ fn run_live_demo(
     println!("Frames captured: {}", total_frames);
     println!("Sustained FPS:   {:.1}", total_frames as f64 / elapsed);
     println!("Total detections: {}", total_detections);
-    println!("Inference latency: avg={:.0}ms  min={}ms  max={}ms", avg_latency, min_latency, max_latency);
+    println!(
+        "Inference latency: avg={:.0}ms  min={}ms  max={}ms",
+        avg_latency, min_latency, max_latency
+    );
 
     // Final telemetry
     let final_sample = TelemetrySample::capture();
@@ -385,7 +426,10 @@ fn run_live_demo(
     println!("  {}", args.output.join("frames/").display());
     println!("  {}", summary_path.display());
     println!("  {}", telemetry_path.display());
-    println!("\nNext: ./scripts/make_video.sh {} 30", args.output.display());
+    println!(
+        "\nNext: ./scripts/make_video.sh {} 30",
+        args.output.display()
+    );
 
     Ok(())
 }
@@ -406,12 +450,18 @@ fn parse_detections(json: &str, frame_seq: u64) -> Vec<common::Detection> {
             // Find confidence
             if let Some(conf_pos) = json[ce..].find("\"confidence\":") {
                 let conf_start = ce + conf_pos + 13;
-                let conf_end = json[conf_start..].find(|c: char| !c.is_ascii_digit() && c != '.')
+                let conf_end = json[conf_start..]
+                    .find(|c: char| !c.is_ascii_digit() && c != '.')
                     .map(|e| conf_start + e)
                     .unwrap_or(conf_start + 5);
                 let conf: f32 = json[conf_start..conf_end].parse().unwrap_or(0.0);
                 dets.push(common::Detection {
-                    bbox: common::BoundingBox { x: 0, y: 0, width: 640, height: 640 },
+                    bbox: common::BoundingBox {
+                        x: 0,
+                        y: 0,
+                        width: 640,
+                        height: 640,
+                    },
                     class: class.to_string(),
                     class_id: 0,
                     confidence: conf,

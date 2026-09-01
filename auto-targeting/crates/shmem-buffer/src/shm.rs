@@ -84,7 +84,8 @@ mod imp {
             unsafe { libc::close(fd) };
             return Err(RingError::Shm(format!("mmap: {e}")));
         }
-        let ptr = NonNull::new(ptr.cast::<u8>()).ok_or_else(|| RingError::Shm("mmap NULL".into()))?;
+        let ptr =
+            NonNull::new(ptr.cast::<u8>()).ok_or_else(|| RingError::Shm("mmap NULL".into()))?;
 
         // SAFETY: ptr — выровненное (page) mmap-отображение обнулённого
         // сегмента длиной len, принадлежащее только нам.
@@ -93,7 +94,11 @@ mod imp {
                 ptr,
                 len,
                 cfg,
-                Backing::Mapped { fd, len, unlink: Some(path) },
+                Backing::Mapped {
+                    fd,
+                    len,
+                    unlink: Some(path),
+                },
             )
         };
         Ok(FrameProducer::new(region))
@@ -145,7 +150,11 @@ mod imp {
             crate::ring::Region::attach_raw(
                 ptr,
                 len,
-                Backing::Mapped { fd, len, unlink: None },
+                Backing::Mapped {
+                    fd,
+                    len,
+                    unlink: None,
+                },
             )
         }?;
         Ok(FrameConsumer::new(region))

@@ -108,8 +108,16 @@ async fn commander_closes_loop_from_tracks_and_telemetry() {
     let fc_stats = fc_task.await.unwrap().unwrap();
 
     // Петля замкнулась: треки приняты, телеметрия текла.
-    assert!(cmd_stats.tracks_received >= 20, "tracks: {}", cmd_stats.tracks_received);
-    assert!(cmd_stats.telemetry_received >= 20, "tele: {}", cmd_stats.telemetry_received);
+    assert!(
+        cmd_stats.tracks_received >= 20,
+        "tracks: {}",
+        cmd_stats.tracks_received
+    );
+    assert!(
+        cmd_stats.telemetry_received >= 20,
+        "tele: {}",
+        cmd_stats.telemetry_received
+    );
     assert!(fc_stats.telemetry_published >= 20);
     // Коррекции: offset (60,40) вне deadband → rate-limiter послал.
     assert!(
@@ -123,10 +131,16 @@ async fn commander_closes_loop_from_tracks_and_telemetry() {
     // быть Scanning — цель выбирается с первым треком).
     let mut got_target = false;
     for _ in 0..10 {
-        let st = status_sub.recv_timeout(Duration::from_secs(3)).await.unwrap();
+        let st = status_sub
+            .recv_timeout(Duration::from_secs(3))
+            .await
+            .unwrap();
         assert_eq!(st.v, CONTRACT_VERSION);
         assert!(
-            matches!(st.state.as_str(), "Tracking" | "TrackingDegraded" | "Scanning" | "TargetSelected"),
+            matches!(
+                st.state.as_str(),
+                "Tracking" | "TrackingDegraded" | "Scanning" | "TargetSelected"
+            ),
             "state: {}",
             st.state
         );
@@ -190,13 +204,17 @@ async fn commander_suppresses_centered_target() {
         ..CommanderBusConfig::default()
     };
     let cmd_bus = EventBus::connect("tcp/127.0.0.1:17454").await.unwrap();
-    let cmd_task = tokio::spawn(async move { CommanderBus::new(cfg).run(&mut commander, &cmd_bus).await });
+    let cmd_task =
+        tokio::spawn(async move { CommanderBus::new(cfg).run(&mut commander, &cmd_bus).await });
 
     let tracks_pub = pub_side.publish_tracks().await.unwrap();
     tokio::time::sleep(Duration::from_millis(600)).await;
     // Цель ровно в центре (320, 240) — внутри deadband.
     for seq in 1..=20u64 {
-        tracks_pub.publish(&track_msg(seq, 320.0, 240.0)).await.unwrap();
+        tracks_pub
+            .publish(&track_msg(seq, 320.0, 240.0))
+            .await
+            .unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
 
@@ -262,7 +280,10 @@ async fn track_flood_terminates_and_keeps_watchdogs_alive() {
     tokio::time::sleep(Duration::from_millis(700)).await;
     // Flood: 3000 треков максимально быстро.
     for seq in 1..=3000u64 {
-        tracks_pub.publish(&track_msg(seq, 380.0, 280.0)).await.unwrap();
+        tracks_pub
+            .publish(&track_msg(seq, 380.0, 280.0))
+            .await
+            .unwrap();
     }
     // Цикл обязан завершиться по max_duration (3с), не застряв в дренаже.
     let stats = tokio::time::timeout(Duration::from_secs(10), cmd_task)

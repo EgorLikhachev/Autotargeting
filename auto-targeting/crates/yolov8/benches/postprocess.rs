@@ -23,7 +23,7 @@ fn synthetic_output(seed: u64) -> Vec<f32> {
         out[num_anchors + a] = 32.0 + rnd() * 576.0; // cy
         out[2 * num_anchors + a] = 8.0 + rnd() * 120.0; // w
         out[3 * num_anchors + a] = 8.0 + rnd() * 120.0; // h
-        // Классы: низкий фон + редкие пики выше 0.35.
+                                                        // Классы: низкий фон + редкие пики выше 0.35.
         for c in 0..80usize {
             let v = if (a + c) % 997 == 0 {
                 0.55 + rnd() * 0.4
@@ -59,7 +59,13 @@ fn bench_yolov8(c: &mut Criterion) {
     // letterbox 640x480 -> 640x640.
     let rgb = vec![77u8; 640 * 480 * 3];
     c.bench_function("letterbox_640x480", |b| {
-        b.iter(|| black_box(yolov8::letterbox(black_box(&rgb), black_box(640), black_box(480))))
+        b.iter(|| {
+            black_box(yolov8::letterbox(
+                black_box(&rgb),
+                black_box(640),
+                black_box(480),
+            ))
+        })
     });
 
     let lb = vec![77u8; 640 * 640 * 3];

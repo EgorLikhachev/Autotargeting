@@ -153,7 +153,11 @@ pub(crate) enum Backing {
     /// Куча (тесты/бенчи, выравнивание 4096 как у mmap).
     Heap(Layout),
     /// mmap-регион; fd закрывается при разрушении.
-    Mapped { fd: i32, len: usize, unlink: Option<String> },
+    Mapped {
+        fd: i32,
+        len: usize,
+        unlink: Option<String>,
+    },
     /// Регион нам не принадлежит (не освобождается).
     External,
 }
@@ -236,7 +240,9 @@ impl Region {
         backing: Backing,
     ) -> Result<Arc<Self>, RingError> {
         if len < size_of::<BufferHeader>() {
-            return Err(RingError::AttachFailed("segment shorter than header".into()));
+            return Err(RingError::AttachFailed(
+                "segment shorter than header".into(),
+            ));
         }
         let h = &*ptr.as_ptr().cast::<BufferHeader>();
         if h.magic.load(Ordering::Acquire) != MAGIC {
@@ -351,7 +357,11 @@ impl Drop for Region {
     fn drop(&mut self) {
         match self.backing {
             Backing::Heap(layout) => unsafe { dealloc(self.ptr.as_ptr(), layout) },
-            Backing::Mapped { fd, len, ref unlink } => {
+            Backing::Mapped {
+                fd,
+                len,
+                ref unlink,
+            } => {
                 teardown_mapped(fd, self.ptr, len, unlink);
             }
             Backing::External => {}
@@ -549,7 +559,9 @@ impl FrameView {
         FrameMetadata {
             width: self.width,
             height: self.height,
-            format: self.storage_format().map_or(PixelFormat::Nv12, StorageFormat::pixel_format),
+            format: self
+                .storage_format()
+                .map_or(PixelFormat::Nv12, StorageFormat::pixel_format),
             captured_at: ts_ns_to_datetime(self.ts_ns),
             seq: self.frame_id,
         }
@@ -613,7 +625,10 @@ impl std::ops::Deref for FrameGuard {
 impl Drop for FrameGuard {
     fn drop(&mut self) {
         // Release: пара к Acquire при взятии — данные дочитаны до декремента.
-        self.region.slot(self.slot_idx).ref_count.fetch_sub(1, Ordering::Release);
+        self.region
+            .slot(self.slot_idx)
+            .ref_count
+            .fetch_sub(1, Ordering::Release);
     }
 }
 
@@ -655,7 +670,9 @@ enum Acquired {
     /// Слот под записью / CAS-гонка — повторить вызов позже.
     Busy,
     /// Под слотом уже другой frame_id (кольцо обернулось) — `id` актуальный.
-    Mismatch { actual: u64 },
+    Mismatch {
+        actual: u64,
+    },
 }
 
 impl FrameConsumer {
@@ -738,8 +755,7 @@ impl FrameConsumer {
     /// `expected_id` — seqlock-валидация после CAS (защита от полного
     /// оборота кольца между выбором кадра и взятием слота).
     fn try_acquire(&self, slot_idx: u64, expected_id: Option<u64>) -> Acquired {
-        let idx = u32::try_from(slot_idx % u64::from(self.capacity()))
-            .expect("capacity <= 4096");
+        let idx = u32::try_from(slot_idx % u64::from(self.capacity())).expect("capacity <= 4096");
         let slot = self.region.slot(idx);
         for _ in 0..ACQUIRE_SPINS {
             let cur = slot.ref_count.load(Ordering::Relaxed);
@@ -840,8 +856,7 @@ pub fn recover_stale_slots(consumer: &FrameConsumer, max_age_ns: u64) -> usize {
             let pid = slot.holder_pid.load(Ordering::Relaxed);
             let stale = now.saturating_sub(slot.ts_ns) > max_age_ns;
             let dead = pid != 0 && pid != std::process::id() && !pid_alive(pid);
-            dead
-                && stale
+            dead && stale
                 && slot
                     .ref_count
                     .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Relaxed)
@@ -1087,8 +1102,7 @@ mod tests {
                 let mut last = 0u64;
                 // Жёсткий дедлайн: баг протокола должен валить тест паникой,
                 // а не подвешивать набор навсегда.
-                let deadline = std::time::Instant::now()
-                    + std::time::Duration::from_secs(60);
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
                 // Выход не по магическому числу кадров (drop-new может
                 // выбросить часть — финальный id < frames_total), а по
                 // «стрим стих»: серия UpToDate без роста latest_id.
@@ -1172,7 +1186,8 @@ mod tests {
     fn to_frame_conversion() {
         let c = cfg(4);
         let prod = FrameProducer::new(Region::init_heap(&c).unwrap());
-        prod.publish(&frame_bytes(&c, 7), 1_700_000_000_000_000_000).unwrap();
+        prod.publish(&frame_bytes(&c, 7), 1_700_000_000_000_000_000)
+            .unwrap();
         let g = prod.consumer().latest().unwrap();
         let f = g.to_frame();
         assert_eq!(f.metadata.width, 64);

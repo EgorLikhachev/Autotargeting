@@ -146,12 +146,7 @@ impl FfmpegRawWriter {
     }
 
     /// Запустить энкодер под размер кадра `width`×`height`, FPS контейнера `fps`.
-    pub fn spawn(
-        output: &str,
-        width: u32,
-        height: u32,
-        fps: u32,
-    ) -> Result<Self, RecorderError> {
+    pub fn spawn(output: &str, width: u32, height: u32, fps: u32) -> Result<Self, RecorderError> {
         if !Self::ffmpeg_available() {
             return Err(RecorderError::FfmpegNotFound(
                 "install ffmpeg (encoder for the recorder)".into(),
@@ -160,16 +155,26 @@ impl FfmpegRawWriter {
         let child = Command::new("ffmpeg")
             .args([
                 "-y",
-                "-loglevel", "error",
-                "-f", "rawvideo",
-                "-pix_fmt", "rgb24",
-                "-s", &format!("{width}x{height}"),
-                "-r", &fps.to_string(),
-                "-i", "pipe:0",
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-crf", "23",
-                "-pix_fmt", "yuv420p",
+                "-loglevel",
+                "error",
+                "-f",
+                "rawvideo",
+                "-pix_fmt",
+                "rgb24",
+                "-s",
+                &format!("{width}x{height}"),
+                "-r",
+                &fps.to_string(),
+                "-i",
+                "pipe:0",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-pix_fmt",
+                "yuv420p",
                 output,
             ])
             .stdin(Stdio::piped())
@@ -259,9 +264,10 @@ impl Recorder {
         }
         let font = match (&cfg.font, cfg.osd) {
             (Some(path), true) => Some(
-                ab_glyph::FontVec::try_from_vec(std::fs::read(path).map_err(|e| {
-                    RecorderError::Font(format!("{}: {e}", path))
-                })?)
+                ab_glyph::FontVec::try_from_vec(
+                    std::fs::read(path)
+                        .map_err(|e| RecorderError::Font(format!("{}: {e}", path)))?,
+                )
                 .map_err(|e| RecorderError::Font(e.to_string()))?,
             ),
             (None, true) => {
@@ -375,7 +381,9 @@ impl Recorder {
                     let line_refs: Vec<&str> = lines.iter().map(String::as_str).collect();
                     cv_visualizer::draw_osd(&mut img, &line_refs, font);
                     if let Err(e) = Self::write_rgb(&mut writer, img.into_raw(), &mut stats) {
-                        tracing::error!("ffmpeg write failed — aborting encoder (output not finalized): {e}");
+                        tracing::error!(
+                            "ffmpeg write failed — aborting encoder (output not finalized): {e}"
+                        );
                         writer.abort();
                         return Err(e);
                     }
@@ -383,7 +391,9 @@ impl Recorder {
                 }
             }
             if let Err(e) = Self::write_rgb(&mut writer, rgb, &mut stats) {
-                tracing::error!("ffmpeg write failed — aborting encoder (output not finalized): {e}");
+                tracing::error!(
+                    "ffmpeg write failed — aborting encoder (output not finalized): {e}"
+                );
                 writer.abort();
                 return Err(e);
             }
@@ -470,7 +480,7 @@ impl Recorder {
                         None
                     }
                 }
-            },
+            }
             ReadMode::Latest => match consumer.latest() {
                 Some(g) => {
                     *last = g.frame_id();
@@ -497,19 +507,22 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("vr-abort-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let out = dir.join("x.mp4");
-        let mut w = FfmpegRawWriter::spawn(out.to_str().unwrap(), 64, 48, 30)
-            .expect("ffmpeg present");
+        let mut w =
+            FfmpegRawWriter::spawn(out.to_str().unwrap(), 64, 48, 30).expect("ffmpeg present");
         // Небольшой кадр, затем немедленный abort.
         w.write_frame(&vec![0u8; 64 * 48 * 3]).unwrap();
         w.abort(); // не должен паниковать/виснуть
-        // Повторный abort-контракт: drop тоже безопасен.
+                   // Повторный abort-контракт: drop тоже безопасен.
         drop(w);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn fps_zero_rejected() {
-        let cfg = RecorderConfig { fps: 0, ..RecorderConfig::default() };
+        let cfg = RecorderConfig {
+            fps: 0,
+            ..RecorderConfig::default()
+        };
         assert!(Recorder::new(cfg).is_err());
     }
 

@@ -33,8 +33,7 @@ async fn main() {
         .expect("tracks publisher");
     tokio::time::sleep(std::time::Duration::from_millis(400)).await;
 
-    let deadline =
-        std::time::Instant::now() + std::time::Duration::from_secs(args.seconds);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(args.seconds);
     let mut seq: u64 = 0;
     while std::time::Instant::now() < deadline {
         seq += 1;

@@ -42,8 +42,7 @@ async fn main() -> Result<()> {
     // Run according to mode
     match args.mode() {
         RunMode::BusMon => {
-            let Command::BusMon { topics, max_len } =
-                args.command.expect("bus-mon subcommand")
+            let Command::BusMon { topics, max_len } = args.command.expect("bus-mon subcommand")
             else {
                 unreachable!()
             };

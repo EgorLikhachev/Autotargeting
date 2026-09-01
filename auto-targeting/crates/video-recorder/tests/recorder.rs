@@ -12,10 +12,14 @@ use video_recorder::{FfmpegRawWriter, RecorderConfig};
 fn ffprobe_summary(path: &std::path::Path) -> Option<(String, i64)> {
     let out = Command::new("ffprobe")
         .args([
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=codec_name,nb_frames",
-            "-of", "csv=p=0",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,nb_frames",
+            "-of",
+            "csv=p=0",
             path.to_str()?,
         ])
         .output()
@@ -54,7 +58,10 @@ fn ffmpeg_writer_produces_playable_mp4() {
     let (codec, frames) = ffprobe_summary(&out).expect("ffprobe failed");
     assert_eq!(codec, "h264");
     assert!(frames >= n as i64, "expected >= {n} frames, got {frames}");
-    assert!(out.metadata().unwrap().len() > 1024, "file suspiciously small");
+    assert!(
+        out.metadata().unwrap().len() > 1024,
+        "file suspiciously small"
+    );
 }
 
 /// Интеграционный (Linux + SHM): продюсер в отдельном процессе публикует
@@ -75,8 +82,16 @@ fn recorder_records_without_blocking_other_consumers() {
     // 1. Продюсер: 320×240 NV12 @ 50 FPS, 6 секунд.
     let mut producer = Command::new(exe("shmem_producer"))
         .args([
-            "--name", &name, "--width", "320", "--height", "240",
-            "--fps", "50", "--seconds", "6",
+            "--name",
+            &name,
+            "--width",
+            "320",
+            "--height",
+            "240",
+            "--fps",
+            "50",
+            "--seconds",
+            "6",
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -87,11 +102,16 @@ fn recorder_records_without_blocking_other_consumers() {
     // 2. Рекордер: OSD (если есть системный шрифт), 5 секунд.
     let mut rec_cmd = Command::new(current_bin());
     rec_cmd.args([
-        "--name", &name,
-        "--out", mp4.to_str().unwrap(),
-        "--fps", "50",
-        "--seconds", "5",
-        "--quiet-timeout", "8",
+        "--name",
+        &name,
+        "--out",
+        mp4.to_str().unwrap(),
+        "--fps",
+        "50",
+        "--seconds",
+        "5",
+        "--quiet-timeout",
+        "8",
     ]);
     if let Some(font) = font_path() {
         rec_cmd.arg("--font").arg(&font);
@@ -118,14 +138,21 @@ fn recorder_records_without_blocking_other_consumers() {
     let _ = producer.wait();
 
     // Рекордер отработал успешно.
-    assert!(rec_out.status.success(), "recorder failed: {}", String::from_utf8_lossy(&rec_out.stdout));
+    assert!(
+        rec_out.status.success(),
+        "recorder failed: {}",
+        String::from_utf8_lossy(&rec_out.stdout)
+    );
     let rec_summary = String::from_utf8_lossy(&rec_out.stdout).to_string();
     eprintln!("recorder: {rec_summary}");
 
     // Параллельный потребитель: кадры читались, ни один не порван.
     let cons_summary = String::from_utf8_lossy(&cons_out.stdout).to_string();
     eprintln!("consumer: {cons_summary}");
-    assert!(cons_summary.contains("TORN=0"), "torn reads while recording!");
+    assert!(
+        cons_summary.contains("TORN=0"),
+        "torn reads while recording!"
+    );
     assert!(
         cons_summary.contains("VERIFIED=") && !cons_summary.contains("VERIFIED=0"),
         "parallel consumer starved while recorder was running"
@@ -157,7 +184,11 @@ fn current_bin() -> std::path::PathBuf {
     if p.file_name().is_some_and(|s| s == "deps") {
         p.pop();
     }
-    p.join(if cfg!(windows) { "video-recorder.exe" } else { "video-recorder" })
+    p.join(if cfg!(windows) {
+        "video-recorder.exe"
+    } else {
+        "video-recorder"
+    })
 }
 
 fn font_path() -> Option<String> {

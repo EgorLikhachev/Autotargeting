@@ -962,3 +962,18 @@ lib event-bus и bus_runner commander; ring.rs — 3 документирова�
 | cv-inference (async-фикс) | ✅ 5 lib, clippy 0 (правильный scope) |
 | detector (троттлинг) | ✅ компиляция + CLI, clippy 0 |
 | Публичный API fc-adapter | ✅ без изменений (обёртки) |
+
+---
+
+## 26. Dependency & toolchain refresh (2026-09-01)
+
+Ветка `chore/deps-refresh`.
+
+| Что | Детали |
+|---|---|
+| Lockfile | 77 patch/minor (tokio/serde/clap/futures/… деревья) |
+| Мажоры | thiserror 1→2, axum 0.7→0.8, sd-notify 0.4→0.5 — drop-in |
+| **MSRV** | **1.75 → 1.85** (edition-2024-capable floor) |
+| Отложенные мажоры | toml 1.x (за figment), criterion 0.8, reqwest 0.13, rustyline 18, base64 0.23 |
+| Попутно | флaky e2e-тест (глобальный TargetId) — фикс; cargo fmt |
+| Проверка | 16 lib-сьютов зелёные, integration зелёные, clippy 0, fmt 0 |

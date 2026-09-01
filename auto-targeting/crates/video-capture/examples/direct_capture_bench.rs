@@ -6,7 +6,7 @@
 
 use clap::Parser;
 use common::PixelFormat;
-use video_capture::{VideoSource, V4l2DirectSource};
+use video_capture::{V4l2DirectSource, VideoSource};
 
 #[derive(Parser)]
 struct Args {
@@ -25,14 +25,19 @@ struct Args {
 fn main() {
     // Init tracing to stderr to see capture thread errors.
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive(tracing::Level::DEBUG.into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::DEBUG.into()),
+        )
         .with_writer(std::io::stderr)
         .init();
 
     let args = Args::parse();
     println!("=== Direct V4L2 ioctl Benchmark ===");
-    println!("{} {}x{} @ {}fps, {} frames", args.device, args.width, args.height, args.fps, args.count);
+    println!(
+        "{} {}x{} @ {}fps, {} frames",
+        args.device, args.width, args.height, args.fps, args.count
+    );
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
@@ -42,12 +47,20 @@ fn main() {
         let mut rx = src.start().await.expect("start failed");
         println!("[+] Streaming. Capturing...");
         // warmup 5
-        for _ in 0..5 { let _ = rx.recv().await; }
+        for _ in 0..5 {
+            let _ = rx.recv().await;
+        }
         let start = std::time::Instant::now();
         let mut n = 0;
         for _ in 0..args.count {
             match rx.recv().await {
-                Some(f) => { n += 1; if n % 20 == 0 { println!("  ... {n} frames"); } let _ = f; }
+                Some(f) => {
+                    n += 1;
+                    if n % 20 == 0 {
+                        println!("  ... {n} frames");
+                    }
+                    let _ = f;
+                }
                 None => break,
             }
         }

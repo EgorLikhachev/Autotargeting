@@ -243,9 +243,10 @@ impl EventBus {
         insert(&mut z, "mode", concat!('"', "peer", '"'))?;
         insert(&mut z, "scouting/multicast/enabled", "false")?;
         // Сначала валидируем endpoint, потом вставляем.
-        let _: zenoh::config::EndPoint = cfg.endpoint.parse().map_err(|e| {
-            BusError::Endpoint(format!("{}: {e}", cfg.endpoint))
-        })?;
+        let _: zenoh::config::EndPoint = cfg
+            .endpoint
+            .parse()
+            .map_err(|e| BusError::Endpoint(format!("{}: {e}", cfg.endpoint)))?;
         let eps = format!("[\"{}\"]", cfg.endpoint);
         if cfg.listen {
             insert(&mut z, "listen/endpoints", &eps)?;
@@ -257,11 +258,12 @@ impl EventBus {
 
     /// Поднять шину (listener; первый/главный процесс).
     pub async fn listen(cfg: BusConfig) -> Result<Self, BusError> {
-        let session = zenoh::open(Self::base_config(&cfg)?)
-            .await
-            .map_err(zerr)?;
+        let session = zenoh::open(Self::base_config(&cfg)?).await.map_err(zerr)?;
         tracing::info!(endpoint = %cfg.endpoint, "event-bus listening");
-        Ok(Self { session, scope: cfg.scope })
+        Ok(Self {
+            session,
+            scope: cfg.scope,
+        })
     }
 
     /// Подключиться к шине (остальные процессы).
@@ -271,11 +273,12 @@ impl EventBus {
             listen: false,
             scope: String::new(),
         };
-        let session = zenoh::open(Self::base_config(&cfg)?)
-            .await
-            .map_err(zerr)?;
+        let session = zenoh::open(Self::base_config(&cfg)?).await.map_err(zerr)?;
         tracing::info!(endpoint, "event-bus connected");
-        Ok(Self { session, scope: cfg.scope })
+        Ok(Self {
+            session,
+            scope: cfg.scope,
+        })
     }
 
     fn key(&self, topic: &str) -> String {
@@ -406,9 +409,7 @@ impl<T: Serialize> TypedPublisher<T> {
 
 /// Подписчик типизированных сообщений (FIFO-канал).
 pub struct TypedSubscriber<T> {
-    inner: zenoh::pubsub::Subscriber<
-        zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>,
-    >,
+    inner: zenoh::pubsub::Subscriber<zenoh::handlers::FifoChannelHandler<zenoh::sample::Sample>>,
     _marker: std::marker::PhantomData<fn() -> T>,
 }
 
@@ -420,7 +421,9 @@ impl<T: DeserializeOwned> TypedSubscriber<T> {
             .recv_async()
             .await
             .map_err(|e| BusError::Zenoh(e.to_string()))?;
-        Ok(serde_json::from_slice(sample.payload().to_bytes().as_ref())?)
+        Ok(serde_json::from_slice(
+            sample.payload().to_bytes().as_ref(),
+        )?)
     }
 
     /// Дождаться следующего сообщения с таймаутом.
@@ -539,7 +542,12 @@ mod tests {
             v: CONTRACT_VERSION,
             track_id: 1,
             frame_seq: 77,
-            bbox: common::BoundingBox { x: 1, y: 2, width: 3, height: 4 },
+            bbox: common::BoundingBox {
+                x: 1,
+                y: 2,
+                width: 3,
+                height: 4,
+            },
             vx: 1.5,
             vy: -0.5,
             class: "person".into(),
