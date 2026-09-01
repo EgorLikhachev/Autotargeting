@@ -11,6 +11,19 @@ is incomplete).
 
 ## [Unreleased]
 
+### Added
+- **Stage 2 roadmap** (docs/STAGE2_ROADMAP.md): the complete plan for the
+  stand-to-aircraft transition — Phase 1.2 (dataset protocol for the four
+  stand classes + fine-tune pipeline with KPI gate mAP>=0.85), Phase 7
+  HITL bench build in 9 verified steps, FC selection matrix (Matek
+  H743-Wing recommended over Pixhawk 6C / SpeedyBee), wiring to the pin
+  (CP2102 USB-TTL, TX/RX cross, common GND), power (dedicated 5V/4A BEC,
+  ~3A OPi5 peak), cooling bill of materials (heatsink+fan, <=80C gate),
+  RC/GCS recommendation (RadioMaster ELRS + Mission Planner), and a
+  split checklist: user purchases/actions (~$158 bench BOM) vs software
+  work (labels-from-config, train/eval scripts, calibration dataset for
+  int8, HITL guides, flight-readiness autocheck).
+
 ### Changed
 - **Dependency & toolchain refresh (2026-09-01)**: lockfile updated (77
   patch/minor bumps incl. tokio/serde/clap/futures trees); major bumps —

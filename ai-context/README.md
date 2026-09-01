@@ -40,7 +40,8 @@
 - `auto-targeting/docs/HARDWARE_TEST_RESULTS.md` — результаты тестирования на RK3588
 - `auto-targeting/docs/sdd/decisions.md` — журнал архитектурных решений (D-001…D-011)
 - `auto-targeting/docs/sdd/progress.json` — трекер этапов (machine-readable)
-- `auto-targeting/docs/BUS_MIGRATION_PLAN.md` — план перевода всех компонентов на шину Zenoh
+- `auto-targeting/docs/BUS_MIGRATION_PLAN.md` — план перевода всех компонентов на шину Zenoh (✅ выполнен)
+- `auto-targeting/docs/STAGE2_ROADMAP.md` — Стадия 2: датасет+fine-tune+HITL+подготовка полётов (закупки/действия пользователя и софт-план)
 
 ## Версия контекста
 
