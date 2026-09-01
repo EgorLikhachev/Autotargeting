@@ -11,6 +11,19 @@ is incomplete).
 
 ## [Unreleased]
 
+### Changed
+- **Dependency & toolchain refresh (2026-09-01)**: lockfile updated (77
+  patch/minor bumps incl. tokio/serde/clap/futures trees); major bumps —
+  thiserror 1→2 (drop-in), axum 0.7→0.8 (health endpoint), sd-notify
+  0.4→0.5; **MSRV 1.75 → 1.85** (rust-version + clippy msrv + docs) —
+  edition-2024-capable floor; deferred majors documented (toml 1.x via
+  figment, criterion 0.8, reqwest 0.13, rustyline 18, base64 0.23 —
+  isolated/transitive, risk > value this round). En route: e2e test
+  global-TargetId flake fixed (id compared to acquire() result, not
+  absolute 1); cargo fmt over workspace (newline-style drift).
+  Full workspace: 16 lib suites green, integration green, clippy clean
+  (lib+tests scope), fmt clean.
+
 ### Added
 - **Stage 8: systemd composition + 30-min soak (closes run_full)** — 8
   services (bus anchor/config-svc, rknn-bridge, camera, detector, tracker,

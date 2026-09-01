@@ -3,8 +3,8 @@
 //! Запуск: `cargo bench -p video-capture --bench convert`
 //! Результаты → target/criterion/. Цифры RK3588 — в docs/PERF_AUDIT_2026-08.md.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use common::{Frame, FrameMetadata, PixelFormat};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn frame(w: u32, h: u32, format: PixelFormat, seed: u8) -> Frame {
     let bpp = match format {
@@ -12,7 +12,9 @@ fn frame(w: u32, h: u32, format: PixelFormat, seed: u8) -> Frame {
         PixelFormat::Rgb24 => 3,
         _ => 1,
     };
-    let data = (0..w as usize * h as usize * bpp).map(|i| (i as u8).wrapping_mul(seed ^ 0x9E)).collect();
+    let data = (0..w as usize * h as usize * bpp)
+        .map(|i| (i as u8).wrapping_mul(seed ^ 0x9E))
+        .collect();
     Frame {
         data,
         metadata: FrameMetadata {

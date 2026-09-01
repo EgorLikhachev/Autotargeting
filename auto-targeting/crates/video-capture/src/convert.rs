@@ -121,7 +121,11 @@ pub fn yuyv_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
     // Y plane: копируем Y-байты (каждый чётный) построчно chunks-итераторами —
     // без bounds-checks и адресной арифметики на пиксель.
     let (y_plane, uv_plane) = nv12.split_at_mut(w * h);
-    for (src_row, y_row) in frame.data.chunks_exact(w * 2).zip(y_plane.chunks_exact_mut(w)) {
+    for (src_row, y_row) in frame
+        .data
+        .chunks_exact(w * 2)
+        .zip(y_plane.chunks_exact_mut(w))
+    {
         for (pair, out2) in src_row.chunks_exact(4).zip(y_row.chunks_exact_mut(2)) {
             out2.copy_from_slice(&[pair[0], pair[2]]);
         }
@@ -320,7 +324,11 @@ pub fn rgb24_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
 
     // Y plane: построчные chunks + integer BT.601 (расхождение с f32 ≤ 1).
     let (y_plane, uv_plane) = nv12.split_at_mut(w * h);
-    for (src_row, y_row) in frame.data.chunks_exact(w * 3).zip(y_plane.chunks_exact_mut(w)) {
+    for (src_row, y_row) in frame
+        .data
+        .chunks_exact(w * 3)
+        .zip(y_plane.chunks_exact_mut(w))
+    {
         for (px, out) in src_row.chunks_exact(3).zip(y_row.iter_mut()) {
             *out = rgb_to_y_u8(px[0], px[1], px[2]);
         }
@@ -365,8 +373,10 @@ pub fn rgb24_to_nv12(frame: &Frame) -> ConversionResult<Frame> {
         let uv_row = &mut uv_plane[uv_rows * w..];
         let mut x = 0;
         while x + 1 < uv_row.len() {
-            let cu = (rgb_to_cb(&src[x * 3..x * 3 + 3]) + rgb_to_cb(&src[x * 3 + 3..x * 3 + 6])) >> 1;
-            let cv = (rgb_to_cr(&src[x * 3..x * 3 + 3]) + rgb_to_cr(&src[x * 3 + 3..x * 3 + 6])) >> 1;
+            let cu =
+                (rgb_to_cb(&src[x * 3..x * 3 + 3]) + rgb_to_cb(&src[x * 3 + 3..x * 3 + 6])) >> 1;
+            let cv =
+                (rgb_to_cr(&src[x * 3..x * 3 + 3]) + rgb_to_cr(&src[x * 3 + 3..x * 3 + 6])) >> 1;
             uv_row[x] = clamp_i32_to_u8(cu >> 8);
             uv_row[x + 1] = clamp_i32_to_u8(cv >> 8);
             x += 2;
@@ -618,11 +628,7 @@ mod tests {
         while y <= 235 {
             for cb in [0i32, 64, 128, 192, 255] {
                 for cr in [0i32, 64, 128, 192, 255] {
-                    let f = ycbcr_to_rgb(
-                        y as f32,
-                        cb as f32 - 128.0,
-                        cr as f32 - 128.0,
-                    );
+                    let f = ycbcr_to_rgb(y as f32, cb as f32 - 128.0, cr as f32 - 128.0);
                     let i = ycbcr_to_rgb_i32(y, cb - 128, cr - 128);
                     assert!(
                         (f.0 as i32 - i.0 as i32).abs() <= 1
@@ -654,8 +660,8 @@ mod tests {
         let (w, h) = (8u32, 6u32);
         let mut data = vec![0u8; (w * h * 3 / 2) as usize];
         // Y-плоскость: градиент; UV: нейтральная хрома (128,128).
-        for i in 0..(w * h) as usize {
-            data[i] = (i % 251) as u8;
+        for (i, b) in data[..(w * h) as usize].iter_mut().enumerate() {
+            *b = (i % 251) as u8;
         }
         for b in &mut data[(w * h) as usize..] {
             *b = 128;
@@ -668,7 +674,9 @@ mod tests {
         for (i, px) in rgb.data.chunks_exact(3).enumerate() {
             let y = (i % 251) as i32;
             assert!(
-                (px[0] as i32 - y).abs() <= 1 && (px[1] as i32 - y).abs() <= 1 && (px[2] as i32 - y).abs() <= 1,
+                (px[0] as i32 - y).abs() <= 1
+                    && (px[1] as i32 - y).abs() <= 1
+                    && (px[2] as i32 - y).abs() <= 1,
                 "px[{i}] = {px:?}, expected ~{y} (neutral chroma)"
             );
         }
@@ -687,7 +695,9 @@ mod tests {
         let mut data = vec![0u8; (w * h * 3 / 2) as usize];
         let mut seed = 7u64;
         let mut rnd = || -> u8 {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             (seed >> 56) as u8
         };
         for b in data.iter_mut() {

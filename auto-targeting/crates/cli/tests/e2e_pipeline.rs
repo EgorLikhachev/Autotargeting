@@ -38,7 +38,7 @@ async fn test_single_detection_acquires_lock_and_transitions_to_tracking() {
     harness.commander.select_target(1).unwrap();
 
     // Feed detection to tracker
-    harness.tracker.acquire(&det);
+    let acquired_id = harness.tracker.acquire(&det);
     harness.tracker.update(std::slice::from_ref(&det));
 
     // Verify tracker has the target
@@ -46,7 +46,9 @@ async fn test_single_detection_acquires_lock_and_transitions_to_tracking() {
         .tracker
         .active_target()
         .expect("target should be active");
-    assert_eq!(target.id, 1);
+    // id — глобальный счётчик (параллельные тесты инкрементят): сравниваем
+    // с захваченным значением, не с абсолютом (фикс флaky-изоляции).
+    assert_eq!(target.id, acquired_id);
 
     // Commander should be in TRACKING state
     assert_eq!(harness.commander.state(), SystemState::Tracking);

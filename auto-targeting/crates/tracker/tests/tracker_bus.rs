@@ -9,7 +9,12 @@ use tracker_crate::{detections_to_frame, Tracker, TrackerConfig};
 
 fn det(x: u32, y: u32, seq: u64, conf: f32) -> Detection {
     Detection {
-        bbox: BoundingBox { x, y, width: 40, height: 80 },
+        bbox: BoundingBox {
+            x,
+            y,
+            width: 40,
+            height: 80,
+        },
         class: "person".into(),
         class_id: 0,
         confidence: conf,
@@ -67,16 +72,26 @@ async fn tracker_consumes_detections_and_publishes_tracks() {
         }
     }
     assert!(msgs >= 1, "no tracks published");
-    assert_eq!(seen_ids.len(), 1, "one moving target must map to one track: {seen_ids:?}");
+    assert_eq!(
+        seen_ids.len(),
+        1,
+        "one moving target must map to one track: {seen_ids:?}"
+    );
 
     // Первый полный трек — контракт полей.
-    let t: TrackMsg = tracks_sub.recv_timeout(Duration::from_millis(200)).await.unwrap();
+    let t: TrackMsg = tracks_sub
+        .recv_timeout(Duration::from_millis(200))
+        .await
+        .unwrap();
     assert!(t.frame_seq >= 1);
     assert!(t.bbox.width > 0);
     assert_eq!(t.v, event_bus::CONTRACT_VERSION);
 
     // 5. Статус компонента.
-    let st = status_sub.recv_timeout(Duration::from_secs(3)).await.unwrap();
+    let st = status_sub
+        .recv_timeout(Duration::from_secs(3))
+        .await
+        .unwrap();
     assert!(st.frames_in >= 1);
     assert!(st.tracks_published >= 1);
 
@@ -107,10 +122,7 @@ async fn two_targets_two_tracks() {
 
     // Две далёкие цели — разные треки.
     for seq in 1..=8u64 {
-        let frame = detections_to_frame(
-            seq,
-            vec![det(50, 50, seq, 0.8), det(500, 300, seq, 0.7)],
-        );
+        let frame = detections_to_frame(seq, vec![det(50, 50, seq, 0.8), det(500, 300, seq, 0.7)]);
         det_pub.publish(&frame).await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
@@ -125,7 +137,11 @@ async fn two_targets_two_tracks() {
         }
     }
     assert!(msgs >= 2, "expected tracks, got {msgs}");
-    assert_eq!(ids.len(), 2, "two targets must produce exactly two tracks: {ids:?}");
+    assert_eq!(
+        ids.len(),
+        2,
+        "two targets must produce exactly two tracks: {ids:?}"
+    );
 
     let _ = handle.await;
     let _ = hub.close().await;

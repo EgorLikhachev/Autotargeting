@@ -473,7 +473,9 @@ impl Commander {
             x: cmd.offset_x.clamp(-1.0, 1.0),
             y: cmd.offset_y.clamp(-1.0, 1.0),
         };
-        let ned = self.camera.offset_to_ned_target_with_attitude(norm, att.pitch, att.yaw);
+        let ned = self
+            .camera
+            .offset_to_ned_target_with_attitude(norm, att.pitch, att.yaw);
         let target = common::PositionTargetNED {
             north: 0.0,
             east: 0.0,

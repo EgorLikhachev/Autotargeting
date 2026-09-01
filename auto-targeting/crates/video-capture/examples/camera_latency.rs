@@ -68,7 +68,14 @@ fn main() {
     println!("=== USB Camera Latency Benchmark ===");
     println!(
         "Device: {}  {}x{} @ {} fps  frames={}  pipeline={}  format={}  backend={}",
-        args.device, args.width, args.height, args.fps, args.count, args.pipeline, args.format, args.backend
+        args.device,
+        args.width,
+        args.height,
+        args.fps,
+        args.count,
+        args.pipeline,
+        args.format,
+        args.backend
     );
     println!();
 
@@ -78,7 +85,10 @@ fn main() {
         "direct" => {
             // Прямой V4L2 ioctl — тот же путь, что v4l2-ctl. Работает с gspca.
             let mut source = video_capture::V4l2DirectSource::new(
-                &args.device, args.width, args.height, args.fps,
+                &args.device,
+                args.width,
+                args.height,
+                args.fps,
             )
             .with_format(pixel_format)
             .with_buffers(4);
@@ -89,9 +99,8 @@ fn main() {
             // v4l crate (abstraction). Известные проблемы: в 5× медленнее
             // прямого ioctl на UVC и виснет на gspca/ov534 (PS Eye).
             use video_capture::V4l2Source;
-            let mut source =
-                V4l2Source::new(&args.device, args.width, args.height, args.fps)
-                    .with_format(pixel_format);
+            let mut source = V4l2Source::new(&args.device, args.width, args.height, args.fps)
+                .with_format(pixel_format);
             rt.block_on(run_bench(&mut source, &args));
         }
         other => {
@@ -206,7 +215,10 @@ async fn run_bench<S: VideoSource>(source: &mut S, args: &Args) {
             fps
         );
         print_stage("Capture (V4L2 dequeue)", &capture_stats);
-        print_stage(&format!("Decode ({}→RGB24)", args.format.to_uppercase()), &decode_stats);
+        print_stage(
+            &format!("Decode ({}→RGB24)", args.format.to_uppercase()),
+            &decode_stats,
+        );
         print_stage("Total (capture+decode)", &total_stats);
     }
 
@@ -220,7 +232,9 @@ struct Stats {
 
 impl Stats {
     fn new() -> Self {
-        Self { samples_us: Vec::new() }
+        Self {
+            samples_us: Vec::new(),
+        }
     }
     fn record(&mut self, us: u64) {
         self.samples_us.push(us);

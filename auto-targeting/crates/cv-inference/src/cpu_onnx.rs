@@ -195,10 +195,7 @@ impl InferenceBackend for CpuInferenceBackend {
         );
         // Кэшируем имя входа (per-frame lookup делал String-аллокацию
         // на каждый кадр — перф-аудит 2026-08).
-        self.input_name = session
-            .inputs()
-            .first()
-            .map(|i| i.name().to_string());
+        self.input_name = session.inputs().first().map(|i| i.name().to_string());
         self.session = Some(session);
         Ok(())
     }

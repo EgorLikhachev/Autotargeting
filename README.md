@@ -3,7 +3,7 @@
 [![CI](https://github.com/EgorLikhachev/Autotargeting/actions/workflows/ci.yml/badge.svg)](https://github.com/EgorLikhachev/Autotargeting/actions/workflows/ci.yml)
 [![Nightly](https://github.com/EgorLikhachev/Autotargeting/actions/workflows/nightly.yml/badge.svg)](https://github.com/EgorLikhachev/Autotargeting/actions/workflows/nightly.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![Rust](https://img.shields.io/badge/rust-stable%20%3E%3D%201.75-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-stable%20%3E%3D%201.85-orange.svg)](https://www.rust-lang.org)
 [![Version](https://img.shields.io/badge/version-0.1.0--phase--1.1-green.svg)](CHANGELOG.md)
 
 **Auto-Targeting System** is a companion computer for autonomous visual target
@@ -84,7 +84,7 @@ for raw numbers.
 
 | Tool | Version | Notes |
 |---|---|---|
-| **Rust** | stable, **≥ 1.75** (MSRV) | set via `rust-toolchain.toml` |
+| **Rust** | stable, **≥ 1.85** (MSRV) | set via `rust-toolchain.toml` |
 | **Git** | any recent | |
 | **CMake** | ≥ 3.16 | only for `rknn-bridge` |
 | **C++ compiler** | GCC ≥ 10 / Clang ≥ 12 | only for `rknn-bridge` |

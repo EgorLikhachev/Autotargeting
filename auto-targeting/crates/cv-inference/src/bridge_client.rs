@@ -284,11 +284,7 @@ impl FrameShm {
             return Err(format!("buf index {index} >= {}", self.buffers));
         }
         if data.len() > self.frame_size {
-            return Err(format!(
-                "frame {} > buffer {}",
-                data.len(),
-                self.frame_size
-            ));
+            return Err(format!("frame {} > buffer {}", data.len(), self.frame_size));
         }
         let dst = unsafe { self.ptr.add(index as usize * self.frame_size) };
         unsafe { std::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len()) };
@@ -554,9 +550,7 @@ impl InferenceBackend for RknnBridgeClient {
             let index = self.shm_buf_cursor % shm.buffers;
             self.shm_buf_cursor = self.shm_buf_cursor.wrapping_add(1);
             if let Err(e) = shm.write_frame(index, &frame.data) {
-                return Err(InferenceError::BridgeProtocol(format!(
-                    "shm write: {e}"
-                )));
+                return Err(InferenceError::BridgeProtocol(format!("shm write: {e}")));
             }
             (None, Some(index))
         } else {

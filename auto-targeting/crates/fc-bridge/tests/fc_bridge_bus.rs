@@ -63,7 +63,10 @@ async fn fc_bridge_publishes_telemetry_status_and_handles_commands() {
     assert!(matches!(sample.mode, 0 | 2 | 10 | 11 | 12 | 15 | 17 | 255));
 
     // Статус: контракт.
-    let st = status_sub.recv_timeout(Duration::from_secs(5)).await.unwrap();
+    let st = status_sub
+        .recv_timeout(Duration::from_secs(5))
+        .await
+        .unwrap();
     assert_eq!(st.v, CONTRACT_VERSION);
     assert!(st.telemetry_hz_actual > 0.0);
 

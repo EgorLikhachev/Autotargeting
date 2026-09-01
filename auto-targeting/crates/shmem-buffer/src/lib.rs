@@ -77,8 +77,8 @@ pub mod ring;
 pub mod shm;
 
 pub use layout::{
-    frame_size, segment_size, BufferHeader, SlotMeta, FORMAT_NV12, FORMAT_RGB24,
-    LAYOUT_VERSION, MAGIC, WRITER_LOCK,
+    frame_size, segment_size, BufferHeader, SlotMeta, FORMAT_NV12, FORMAT_RGB24, LAYOUT_VERSION,
+    MAGIC, WRITER_LOCK,
 };
 pub use ring::{
     now_ns, recover_stale_slots, ts_ns_to_datetime, DropReason, FrameConsumer, FrameGuard,

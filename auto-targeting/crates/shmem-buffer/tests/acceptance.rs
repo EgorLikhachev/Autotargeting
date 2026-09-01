@@ -208,7 +208,8 @@ fn acceptance_concurrent_consumers_threads() {
                             let id = g.frame_id();
                             assert!(
                                 g.chunks_exact(4)
-                                    .all(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]) == id as u32),
+                                    .all(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]])
+                                        == id as u32),
                                 "torn read @{id}"
                             );
                             last = id;
@@ -252,7 +253,7 @@ fn acceptance_segment_memory_budget() {
     let fs = shmem_buffer::frame_size(shmem_buffer::FORMAT_NV12, 640, 480).unwrap();
     assert_eq!(fs, 460_800);
     assert_eq!(segment_size(10, fs), 4_608_704); // ≈ 4.4 MiB
-    // 720p RGB24 × 10 — верхняя граница.
+                                                 // 720p RGB24 × 10 — верхняя граница.
     let fs_rgb = shmem_buffer::frame_size(shmem_buffer::FORMAT_RGB24, 1280, 720).unwrap();
     assert_eq!(segment_size(10, fs_rgb), 27_648_704); // ≈ 26.4 MiB
 }
@@ -304,7 +305,16 @@ mod multiprocess {
             .spawn()
             .expect("spawn fast consumer");
         let cons_slow = std::process::Command::new(exe("shmem_consumer"))
-            .args(["--name", &name, "--mode", "slow", "--hold-ms", "300", "--seconds", "6"])
+            .args([
+                "--name",
+                &name,
+                "--mode",
+                "slow",
+                "--hold-ms",
+                "300",
+                "--seconds",
+                "6",
+            ])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::inherit())
             .spawn()
@@ -355,7 +365,16 @@ mod multiprocess {
         prod.publish(&pattern(&cfg, 1), 1).unwrap();
 
         let mut child = std::process::Command::new(exe("shmem_consumer"))
-            .args(["--name", &name, "--mode", "slow", "--hold-ms", "60000", "--seconds", "60"])
+            .args([
+                "--name",
+                &name,
+                "--mode",
+                "slow",
+                "--hold-ms",
+                "60000",
+                "--seconds",
+                "60",
+            ])
             .stdout(std::process::Stdio::null())
             .spawn()
             .expect("spawn slow");
@@ -365,7 +384,10 @@ mod multiprocess {
         // Кольцо заполняется свободными слотами (id2..4 → слоты 2,3,0)...
         for id in 2..=4u64 {
             assert!(
-                matches!(prod.publish(&pattern(&cfg, id), id).unwrap(), PublishResult::Published { .. }),
+                matches!(
+                    prod.publish(&pattern(&cfg, id), id).unwrap(),
+                    PublishResult::Published { .. }
+                ),
                 "free slot unexpectedly busy (id {id})"
             );
         }

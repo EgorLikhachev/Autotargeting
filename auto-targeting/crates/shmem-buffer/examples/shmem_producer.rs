@@ -10,7 +10,9 @@
 //! Паттерн кадра: каждое u32-слово = frame_id (детектор torn-read у consumer).
 
 use clap::Parser;
-use shmem_buffer::{create_in_process, create_shared, now_ns, PublishResult, RingConfig, StorageFormat};
+use shmem_buffer::{
+    create_in_process, create_shared, now_ns, PublishResult, RingConfig, StorageFormat,
+};
 
 #[derive(Parser)]
 struct Args {
@@ -66,7 +68,9 @@ fn main() {
                 std::process::exit(2);
             }
             Err(shmem_buffer::RingError::SegmentExists(n)) => {
-                eprintln!("[!] segment '{n}' already exists (stale producer?); remove: rm /dev/shm/{n}");
+                eprintln!(
+                    "[!] segment '{n}' already exists (stale producer?); remove: rm /dev/shm/{n}"
+                );
                 std::process::exit(3);
             }
             Err(e) => panic!("create_shared: {e}"),
@@ -74,7 +78,10 @@ fn main() {
     };
 
     let frame_size = producer.config().frame_size() as usize;
-    println!("[+] ring created: frame_size={frame_size} B, segment in /dev/shm/{}", args.name);
+    println!(
+        "[+] ring created: frame_size={frame_size} B, segment in /dev/shm/{}",
+        args.name
+    );
 
     let period = std::time::Duration::from_nanos(1_000_000_000 / u64::from(args.fps.max(1)));
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(args.seconds);
@@ -83,7 +90,7 @@ fn main() {
 
     while std::time::Instant::now() < deadline {
         let seq = producer.stats().published + 1; // следующий id (для паттерна)
-        // Паттерн: каждое u32-слово = frame_id — детектор torn-read.
+                                                  // Паттерн: каждое u32-слово = frame_id — детектор torn-read.
         for w in pattern_buf.chunks_exact_mut(4) {
             w.copy_from_slice(&(seq as u32).to_le_bytes());
         }
@@ -101,8 +108,5 @@ fn main() {
     }
 
     let s = producer.stats();
-    println!(
-        "[summary] published={} dropped={}",
-        s.published, s.dropped
-    );
+    println!("[summary] published={} dropped={}", s.published, s.dropped);
 }

@@ -69,7 +69,14 @@ fn main() {
 
     println!(
         "=== camera_publisher === {} {}x{}@{} fmt={} cap={} {}s -> /dev/shm/{}",
-        args.device, args.width, args.height, args.fps, args.format, args.capacity, args.seconds, args.name
+        args.device,
+        args.width,
+        args.height,
+        args.fps,
+        args.format,
+        args.capacity,
+        args.seconds,
+        args.name
     );
 
     let ring_cfg = shmem_buffer::RingConfig {
@@ -97,7 +104,7 @@ fn main() {
         .build()
         .expect("tokio rt");
     rt.block_on(async {
-        use video_capture::{VideoSource, V4l2DirectSource};
+        use video_capture::{V4l2DirectSource, VideoSource};
 
         // M1: статус на шину (опционально).
         let status_pub = match &args.bus {
@@ -171,7 +178,11 @@ fn main() {
             if last_status.elapsed() >= std::time::Duration::from_secs(1) {
                 let s = producer.stats();
                 let secs = window_start.elapsed().as_secs_f32();
-                let fps = if secs > 0.0 { window_frames as f32 / secs } else { 0.0 };
+                let fps = if secs > 0.0 {
+                    window_frames as f32 / secs
+                } else {
+                    0.0
+                };
                 if let Some((_, Some(p))) = &status_pub {
                     let st = CameraStatus {
                         v: event_bus::CONTRACT_VERSION,

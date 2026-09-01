@@ -22,7 +22,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 authors = ["Auto-Targeting Team"]
 repository = "https://github.com/EgorLikhachev/Autotargeting"
@@ -45,7 +45,7 @@ serde_json = "1.0"
 toml = "0.8"
 
 # Errors
-thiserror = "1.0"
+thiserror = "2"
 anyhow = "1.0"
 
 # Concurrency primitives
@@ -66,7 +66,7 @@ libc = "0.2"
 zenoh = "1"
 
 # HTTP server (for health endpoint)
-axum = "0.7"
+axum = "0.8"
 tower = "0.5"
 
 # Systemd notify

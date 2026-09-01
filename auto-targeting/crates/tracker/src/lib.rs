@@ -79,14 +79,21 @@ struct Metrics {
 
 impl Metrics {
     fn new() -> Self {
-        Self { window_start: Instant::now(), window_frames: 0 }
+        Self {
+            window_start: Instant::now(),
+            window_frames: 0,
+        }
     }
     fn bump(&mut self) {
         self.window_frames += 1;
     }
     fn fps(&mut self) -> f32 {
         let secs = self.window_start.elapsed().as_secs_f32();
-        let fps = if secs > 0.0 { self.window_frames as f32 / secs } else { 0.0 };
+        let fps = if secs > 0.0 {
+            self.window_frames as f32 / secs
+        } else {
+            0.0
+        };
         self.window_start = Instant::now();
         self.window_frames = 0;
         fps
@@ -166,7 +173,11 @@ impl Tracker {
             frames_in += 1;
             metrics.bump();
 
-            let DetectionsFrame { detections, frame_seq, .. } = event;
+            let DetectionsFrame {
+                detections,
+                frame_seq,
+                ..
+            } = event;
 
             // Штатный трекер принимает &[Detection].
             mt.update(&detections);

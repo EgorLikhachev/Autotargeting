@@ -70,5 +70,10 @@ fn bench_roundtrip(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_publish, bench_acquire_release, bench_roundtrip);
+criterion_group!(
+    benches,
+    bench_publish,
+    bench_acquire_release,
+    bench_roundtrip
+);
 criterion_main!(benches);

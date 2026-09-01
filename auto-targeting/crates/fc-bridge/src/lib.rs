@@ -128,7 +128,8 @@ impl FcBridge {
         tokio::time::sleep(Duration::from_millis(300)).await;
 
         let mut stats = BridgeStats::default();
-        let telemetry_period = Duration::from_millis(u64::from(1000 / self.cfg.telemetry_hz.max(1)));
+        let telemetry_period =
+            Duration::from_millis(u64::from(1000 / self.cfg.telemetry_hz.max(1)));
         let mut last_tele = Instant::now() - telemetry_period;
         let mut last_status = Instant::now();
         let started = Instant::now();
@@ -221,7 +222,11 @@ impl FcBridge {
             // Статус.
             if last_status.elapsed() >= self.cfg.status_interval {
                 let secs = win_start.elapsed().as_secs_f32();
-                let fps = if secs > 0.0 { win_frames as f32 / secs } else { 0.0 };
+                let fps = if secs > 0.0 {
+                    win_frames as f32 / secs
+                } else {
+                    0.0
+                };
                 let hb = adapter.heartbeat_status();
                 let st = FcBridgeStatus {
                     v: CONTRACT_VERSION,
@@ -265,7 +270,10 @@ impl FcBridge {
                 } else {
                     let lat = args["lat"].as_f64().ok_or_else(|| Self::need("lat"))?;
                     let lon = args["lon"].as_f64().ok_or_else(|| Self::need("lon"))?;
-                    let alt = args.get("alt").and_then(serde_json::Value::as_f64).unwrap_or(0.0) as f32;
+                    let alt = args
+                        .get("alt")
+                        .and_then(serde_json::Value::as_f64)
+                        .unwrap_or(0.0) as f32;
                     adapter
                         .set_roi(common::RoiTarget::GlobalLatLng { lat, lon, alt })
                         .await?;
@@ -274,7 +282,10 @@ impl FcBridge {
             }
             "set_pos_ned" | "set_position_target_local_ned" => {
                 let g = |k: &str| -> Result<f32, BridgeError> {
-                    args[k].as_f64().map(|v| v as f32).ok_or_else(|| Self::need(k))
+                    args[k]
+                        .as_f64()
+                        .map(|v| v as f32)
+                        .ok_or_else(|| Self::need(k))
                 };
                 let t = common::PositionTargetNED {
                     north: g("north")?,
@@ -282,7 +293,10 @@ impl FcBridge {
                     down: g("down")?,
                     yaw: g("yaw")?,
                 };
-                adapter.set_position_target_local_ned(t).await.map_err(BridgeError::Fc)
+                adapter
+                    .set_position_target_local_ned(t)
+                    .await
+                    .map_err(BridgeError::Fc)
             }
             "set_mode" => {
                 let name = args["mode"].as_str().ok_or_else(|| Self::need("mode"))?;

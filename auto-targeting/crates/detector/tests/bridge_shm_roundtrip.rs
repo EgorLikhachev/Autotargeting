@@ -67,15 +67,16 @@ async fn bridge_shm_roundtrip_init_and_infer() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    assert!(std::path::Path::new(&sock).exists(), "bridge socket never appeared");
+    assert!(
+        std::path::Path::new(&sock).exists(),
+        "bridge socket never appeared"
+    );
 
     let cfg = cv_inference::RknnBridgeConfig {
         socket_path: sock.clone().into(),
-        model_path: shellexpand(
-            "~/auto-targeting/auto-targeting/models/yolov8n_int8.rknn",
-        )
-        .to_string_lossy()
-        .into_owned(),
+        model_path: shellexpand("~/auto-targeting/auto-targeting/models/yolov8n_int8.rknn")
+            .to_string_lossy()
+            .into_owned(),
         input_width: 640,
         input_height: 480,
         input_format: "rgb24".into(),

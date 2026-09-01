@@ -28,9 +28,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::watch;
+use tracing::info;
 #[cfg(unix)]
 use tracing::{debug, warn};
-use tracing::info;
 
 /// Health status — shared state обновляемое из main loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]

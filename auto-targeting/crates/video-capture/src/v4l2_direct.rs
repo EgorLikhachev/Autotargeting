@@ -81,10 +81,10 @@ struct V4l2PixFormat {
 /// between `type` (u32) and the union. Total = 4 + 4(pad) + 200(union) = 208.
 #[repr(C)]
 struct V4l2Format {
-    typ: u32,                  // offset 0-3
-    _pad0: u32,                // offset 4-7 (kernel padding for 8-byte aligned union)
-    pix: V4l2PixFormat,        // offset 8-55 (first 48 bytes of the 200-byte union)
-    _pad: [u8; 152],           // offset 56-207 (rest of union: 200-48=152)
+    typ: u32,           // offset 0-3
+    _pad0: u32,         // offset 4-7 (kernel padding for 8-byte aligned union)
+    pix: V4l2PixFormat, // offset 8-55 (first 48 bytes of the 200-byte union)
+    _pad: [u8; 152],    // offset 56-207 (rest of union: 200-48=152)
 }
 
 /// v4l2_requestbuffers (20 bytes).
@@ -233,7 +233,15 @@ impl VideoSource for V4l2DirectSource {
 
         std::thread::spawn(move || {
             let result = run_direct_capture(
-                &device_path, width, height, fps, fourcc, format, num_buffers, tx, stop_flag,
+                &device_path,
+                width,
+                height,
+                fps,
+                fourcc,
+                format,
+                num_buffers,
+                tx,
+                stop_flag,
             );
             if let Err(e) = result {
                 error!(error = %e, "V4L2 direct capture thread exited with error");
@@ -270,9 +278,8 @@ fn run_direct_capture(
 ) -> VideoResult<()> {
     // 1. Open device.
     let fd = unsafe {
-        let c_path = std::ffi::CString::new(device_path).map_err(|e| {
-            VideoCaptureError::DeviceOpen(format!("invalid path: {e}"))
-        })?;
+        let c_path = std::ffi::CString::new(device_path)
+            .map_err(|e| VideoCaptureError::DeviceOpen(format!("invalid path: {e}")))?;
         let ret = libc::open(c_path.as_ptr(), libc::O_RDWR);
         if ret < 0 {
             return Err(VideoCaptureError::DeviceOpen(format!(
@@ -313,8 +320,17 @@ fn run_direct_capture(
     } else {
         (neg_w as usize * neg_h as usize * 3).max(1024)
     };
-    debug!(width = neg_w, height = neg_h, buf_size, "V4L2 direct format negotiated");
-    info!(width = neg_w, height = neg_h, "V4L2 direct format negotiated");
+    debug!(
+        width = neg_w,
+        height = neg_h,
+        buf_size,
+        "V4L2 direct format negotiated"
+    );
+    info!(
+        width = neg_w,
+        height = neg_h,
+        "V4L2 direct format negotiated"
+    );
 
     // 3. Set frame rate (VIDIOC_S_PARM).
     if fps > 0 {
@@ -376,7 +392,10 @@ fn run_direct_capture(
                 "mmap buffer {i} failed: len={mmap_len} offset={offset} err={err}"
             )));
         }
-        mapped.push(MappedBuffer { ptr, length: mmap_len });
+        mapped.push(MappedBuffer {
+            ptr,
+            length: mmap_len,
+        });
 
         // Queue this buffer (VIDIOC_QBUF).
         buf[4..8].copy_from_slice(&V4L2_BUF_TYPE_VIDEO_CAPTURE.to_ne_bytes());
@@ -403,7 +422,9 @@ fn run_direct_capture(
         match unsafe { ioctl_raw(fd, VIDIOC_DQBUF, buf.as_mut_ptr()) } {
             Ok(()) => {}
             Err(e) => {
-                if stop_flag.load(Ordering::SeqCst) { break; }
+                if stop_flag.load(Ordering::SeqCst) {
+                    break;
+                }
                 warn!(error = %e, "V4L2 direct dequeue error");
                 std::thread::sleep(std::time::Duration::from_millis(1));
                 continue;

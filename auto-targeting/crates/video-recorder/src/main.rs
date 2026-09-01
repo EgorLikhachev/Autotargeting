@@ -6,7 +6,7 @@
 //!       --font /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf
 
 use clap::Parser;
-use video_recorder::{attach, Recorder, RecorderConfig, ReadMode};
+use video_recorder::{attach, ReadMode, Recorder, RecorderConfig};
 
 #[derive(Parser)]
 struct Args {
