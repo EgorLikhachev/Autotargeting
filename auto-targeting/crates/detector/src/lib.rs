@@ -82,6 +82,12 @@ pub struct DetectorConfig {
     pub status_interval: Duration,
     /// Прекратить после N секунд (0 — пока жив стрим).
     pub max_duration: Option<Duration>,
+    /// C5 (ADR D-017): NPU-троттлинг. Выше throttle_temp_c — работаем
+    /// 1 кадр каждые throttle_every_n (пропуская остальные), ниже — штатно.
+    /// 0.0 = выключено.
+    pub throttle_temp_c: f32,
+    /// Период троттлинга (каждый N-й кадр).
+    pub throttle_every_n: u32,
 }
 
 impl Default for DetectorConfig {
@@ -97,6 +103,8 @@ impl Default for DetectorConfig {
             quiet_timeout: Duration::from_secs(5),
             status_interval: Duration::from_secs(5),
             max_duration: None,
+            throttle_temp_c: 85.0,
+            throttle_every_n: 3,
         }
     }
 }
@@ -331,6 +339,10 @@ impl Detector {
         let started = Instant::now();
         let mut last_frame_at = Instant::now();
         let mut last_status = Instant::now();
+        // C5: кэш термалы (обновление ~5с) и счётчик троттлинга.
+        let mut npu_temp_cache: Option<f32> = None;
+        let mut thermal_last_poll = Instant::now() - Duration::from_secs(10);
+        let mut throttle_skip: u32 = 0;
 
         loop {
             if let Some(max) = self.cfg.max_duration {
@@ -353,6 +365,18 @@ impl Detector {
                     }
                 },
             };
+            // C5: NPU-троттлинг — thermal-зонд раз в ~5с (дешёво, sysfs).
+            if self.cfg.throttle_temp_c > 0.0 {
+                thermal_poll(&mut npu_temp_cache, &mut thermal_last_poll);
+                if let Some(t) = npu_temp_cache {
+                    if t >= self.cfg.throttle_temp_c {
+                        throttle_skip = throttle_skip.saturating_add(1);
+                        if throttle_skip % self.cfg.throttle_every_n.max(1) != 0 {
+                            continue; // кадр пропущен — NPU остывает
+                        }
+                    }
+                }
+            }
             last_frame_at = Instant::now();
             stats.frames_processed += 1;
 
@@ -421,6 +445,14 @@ impl Detector {
             "detector finished"
         );
         Ok(stats)
+    }
+}
+
+/// Обновить кэш NPU-температуры не чаще раза в 5с (sysfs; C5).
+fn thermal_poll(cache: &mut Option<f32>, last: &mut Instant) {
+    if last.elapsed() >= Duration::from_secs(5) {
+        *cache = system_telemetry::npu_temp_c().ok().flatten();
+        *last = Instant::now();
     }
 }
 

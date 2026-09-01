@@ -8,6 +8,7 @@
 //! See `docs/ARCHITECTURE.md` §1.3 for the design rationale.
 
 pub mod ardupilot_mavlink;
+pub mod mavlink_core;
 pub mod mock;
 pub mod rate_limiter;
 pub mod sitl_mavlink;

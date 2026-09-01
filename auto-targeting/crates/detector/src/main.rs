@@ -37,6 +37,9 @@ struct Args {
     /// Тишина кольца до завершения, сек.
     #[arg(long, default_value_t = 5)]
     quiet_timeout: u64,
+    /// NPU-троттлинг: выше этой температуры — каждый N-й кадр (0 = выкл).
+    #[arg(long, default_value_t = 85.0)]
+    throttle_temp: f32,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -68,6 +71,7 @@ async fn main() {
         bridge_socket: args.bridge_socket.clone(),
         frame_shm_path: args.frame_shm.clone(),
         quiet_timeout: std::time::Duration::from_secs(args.quiet_timeout.max(1)),
+        throttle_temp_c: args.throttle_temp,
         max_duration: (args.seconds > 0).then(|| std::time::Duration::from_secs(args.seconds)),
         ..DetectorConfig::default()
     };

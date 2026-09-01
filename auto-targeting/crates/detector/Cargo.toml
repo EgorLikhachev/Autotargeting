@@ -11,6 +11,7 @@ description = "TG26-35: independent detector component — SHM ring in, detectio
 common = { workspace = true }
 shmem-buffer = { workspace = true }
 event-bus = { workspace = true }
+system-telemetry = { workspace = true }
 cv-inference = { workspace = true }
 video-capture = { workspace = true }
 yolov8 = { workspace = true }
@@ -32,3 +33,4 @@ cpu-onnx = ["cv-inference/cpu-onnx"]
 chrono = { workspace = true }
 shmem-buffer = { workspace = true }
 event-bus = { workspace = true }
+system-telemetry = { workspace = true }

@@ -192,6 +192,7 @@ impl FcBridge {
                         detail: serde_json::json!({}),
                         at: chrono::Utc::now(),
                     };
+                    // best-effort: потеря события телеметрии допустима (C6)
                     let _ = fc_pub.publish(&ev).await;
                     prev_alive = Some(alive);
                 }
